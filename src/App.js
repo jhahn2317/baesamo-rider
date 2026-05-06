@@ -199,12 +199,26 @@ function MaintenanceView({ user }) {
   }, [user.uid]);
 
   const handleSave = async () => {
-    if (!formData.item || !formData.cost) return alert("내용을 입력하세요.");
-    await addDoc(collection(db, 'maintenance'), { 
-      ...formData, userId: user.uid, cost: parseInt(formData.cost.replace(/,/g, '')),
-      mileage: parseInt(formData.mileage.replace(/,/g, '') || 0), createdAt: serverTimestamp() 
-    });
-    setModalOpen(false); setStep(1); setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
+    if (!formData.item || !formData.cost) return alert("정비 항목과 비용을 모두 입력해주세요!");
+    
+    try {
+      // 💡 안전한 숫자 변환 및 에러 방지 처리
+      await addDoc(collection(db, 'maintenance'), { 
+        item: formData.item,
+        date: formData.date,
+        cost: parseInt(String(formData.cost).replace(/,/g, '')) || 0,
+        mileage: parseInt(String(formData.mileage).replace(/,/g, '')) || 0,
+        userId: user.uid, 
+        createdAt: serverTimestamp() 
+      });
+      
+      setModalOpen(false); 
+      setStep(1); 
+      setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
+    } catch (error) {
+      console.error("저장 에러:", error);
+      alert(`[저장 실패] 오류가 발생했습니다.\n내용: ${error.message}`);
+    }
   };
 
   return (
@@ -214,10 +228,11 @@ function MaintenanceView({ user }) {
         <Wrench size={32} className="text-blue-100" />
       </div>
       <div className="space-y-3">
+        {list.length === 0 && <div className="text-center py-10 text-slate-400 font-bold text-sm bg-white rounded-2xl border border-dashed border-slate-200">등록된 정비 내역이 없습니다.</div>}
         {list.map(m => (
           <div key={m.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
             <div><p className="text-xs font-bold text-slate-400">{m.date}</p><p className="font-black text-slate-800">{m.item}</p>{m.mileage > 0 && <p className="text-[10px] text-blue-500 font-bold">{formatLargeMoney(m.mileage)}km에 교체</p>}</div>
-            <div className="text-right"><p className="font-black text-slate-700">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1"><Trash2 size={14}/></button></div>
+            <div className="text-right"><p className="font-black text-slate-700">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1 active:scale-90"><Trash2 size={14}/></button></div>
           </div>
         ))}
       </div>
@@ -431,6 +446,8 @@ function StatusView({ allUsers }) {
     </div>
   );
 }
+
+
 
 // ==========================================
 // 4. 로그인 및 회원가입 화면
