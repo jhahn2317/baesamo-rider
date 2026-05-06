@@ -1041,6 +1041,10 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
           </div>
         </div>
       )}
+   </div>
+  );
+}
+
 
 // === [7. 최상단 앱 및 하단 메뉴 (App)] ===
 
