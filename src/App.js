@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 
+// 아이콘 라이브러리
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
   Trash2, Clock, ChevronDown, ChevronUp, 
   Target, Edit3, X, Timer, Coins, Filter, RefreshCw, 
   ChevronLeft, ChevronRight, Settings, Users, Ghost,
   CalendarCheck, AlertCircle, ChevronDownSquare, Share,
-  Crown, Trophy
+  Wrench, MessageSquare, Megaphone, ThumbsUp, Flame
 } from 'lucide-react';
 
 // ==========================================
-// 1. 배사모 FIREBASE SETUP
+// 1. FIREBASE SETUP
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyCfRI6es38NWQAIGUAxT5Uxx446TE8AG0c",
@@ -28,47 +29,34 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ==========================================
-// 2. HELPER FUNCTIONS (유틸리티 함수)
+// 2. UTILS (시간 및 포맷팅)
 // ==========================================
-const getKSTDateStr = () => {
+const getKSTDate = () => {
   const d = new Date();
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-  const kstTime = new Date(utc + (9 * 3600000));
-  return `${kstTime.getFullYear()}-${String(kstTime.getMonth() + 1).padStart(2, '0')}-${String(kstTime.getDate()).padStart(2, '0')}`;
+  return new Date(utc + (9 * 3600000));
 };
 
-const getKSTDateStrFromDate = (dObj) => {
-  if (!dObj || isNaN(dObj.getTime())) return '';
-  const utc = dObj.getTime() + (dObj.getTimezoneOffset() * 60000);
-  const kstTime = new Date(utc + (9 * 3600000));
-  return `${kstTime.getFullYear()}-${String(kstTime.getMonth() + 1).padStart(2, '0')}-${String(kstTime.getDate()).padStart(2, '0')}`;
+const getKSTDateStr = (dateObj = getKSTDate()) => {
+  return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+};
+
+// 새벽 6시 기준 오늘 날짜 계산 (새벽 6시 이전이면 전날로 처리)
+const getWorkDateStr = () => {
+  const now = getKSTDate();
+  if (now.getHours() < 6) {
+    now.setDate(now.getDate() - 1);
+  }
+  return getKSTDateStr(now);
 };
 
 const formatTimeStr = (dateObj) => {
-  if (!dateObj || isNaN(dateObj.getTime())) return '';
+  if (!dateObj || isNaN(dateObj.getTime())) return '00:00:00';
   return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`;
 };
 
-const getPaydayStr = (dateString) => {
-  if (!dateString || typeof dateString !== 'string') return '';
-  const parts = dateString.split('-');
-  if (parts.length !== 3) return '';
-  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-  const daysToAdd = [5, 4, 3, 9, 8, 7, 6][d.getDay()];
-  d.setDate(d.getDate() + daysToAdd);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const getWeekOfMonth = (dateStr) => {
-  if (!dateStr || typeof dateStr !== 'string') return 1;
-  const date = new Date(dateStr);
-  if(isNaN(date.getTime())) return 1;
-  const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  return Math.ceil((date.getDate() + firstDay) / 7);
-};
-
 const formatLargeMoney = (v) => {
-  if (v === '' || v === undefined || v === null) return '0';
+  if (!v) return '0';
   const num = typeof v === 'string' ? parseFloat(v.replace(/,/g, '')) : v;
   return isNaN(num) ? '0' : new Intl.NumberFormat('ko-KR').format(num);
 };
@@ -83,104 +71,19 @@ const formatCompactMoney = (val) => {
   return new Intl.NumberFormat('ko-KR').format(absVal);
 };
 
-const calcDailyMetrics = (deliveries) => {
-  if (!deliveries || deliveries.length === 0) return { durationStr: '', hourlyRate: 0, perDelivery: 0, totalCnt: 0, totalAmt: 0 };
-  let intervals = [];
-  deliveries.forEach(d => {
-    if(d.startTime && d.endTime && typeof d.startTime === 'string' && typeof d.endTime === 'string') {
-      let startParts = d.startTime.split(':').map(Number);
-      let endParts = d.endTime.split(':').map(Number);
-      let sh = startParts[0] || 0, sm = startParts[1] || 0;
-      let eh = endParts[0] || 0, em = endParts[1] || 0;
-      if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
-        let start = sh * 60 + sm;
-        let end = eh * 60 + em;
-        if (end <= start) end += 1440; 
-        intervals.push({start, end});
-      }
-    }
-  });
-  intervals.sort((a,b) => a.start - b.start);
-  let merged = [];
-  if (intervals.length > 0) {
-    let current = {...intervals[0]};
-    for(let i=1; i<intervals.length; i++) {
-      if (intervals[i].start <= current.end) current.end = Math.max(current.end, intervals[i].end);
-      else { merged.push(current); current = {...intervals[i]}; }
-    }
-    merged.push(current);
-  }
-  let totalMins = merged.reduce((acc, curr) => acc + (curr.end - curr.start), 0);
-  let totalAmt = deliveries.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-  let totalCnt = deliveries.reduce((acc, curr) => acc + (curr.count || 0), 0);
-  
-  let hours = Math.floor(totalMins / 60);
-  let mins = totalMins % 60;
-  let durationStr = totalMins > 0 ? `${hours > 0 ? hours+'시간 ' : ''}${mins > 0 ? mins+'분' : ''}`.trim() : '';
-  let hourlyRate = totalMins > 0 ? Math.round(totalAmt / (totalMins / 60)) : 0;
-  let perDelivery = totalCnt > 0 ? Math.round(totalAmt / totalCnt) : 0;
-  return { durationStr, hourlyRate, perDelivery, totalCnt, totalAmt };
-};
-
-const getGroupMetrics = (items) => {
-  let totalMins = 0; const byDate = {};
-  items.forEach(d => { if(!d.date) return; if(!byDate[d.date]) byDate[d.date] = []; byDate[d.date].push(d); });
-  Object.values(byDate).forEach(dayItems => {
-    let intervals = [];
-    dayItems.forEach(d => {
-      if(d.startTime && d.endTime && typeof d.startTime === 'string' && typeof d.endTime === 'string') {
-        let startParts = d.startTime.split(':').map(Number);
-        let endParts = d.endTime.split(':').map(Number);
-        let sh = startParts[0] || 0, sm = startParts[1] || 0;
-        let eh = endParts[0] || 0, em = endParts[1] || 0;
-        let start = sh * 60 + sm; let end = eh * 60 + em;
-        if (end <= start) end += 1440; 
-        intervals.push({start, end});
-      }
-    });
-    intervals.sort((a,b) => a.start - b.start); let merged = [];
-    if (intervals.length > 0) {
-      let current = {...intervals[0]};
-      for(let i=1; i<intervals.length; i++) {
-        if (intervals[i].start <= current.end) current.end = Math.max(current.end, intervals[i].end);
-        else { merged.push(current); current = {...intervals[i]}; }
-      }
-      merged.push(current);
-    }
-    totalMins += merged.reduce((acc, curr) => acc + (curr.end - curr.start), 0);
-  });
-  const totalAmt = items.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-  const totalCnt = items.reduce((acc, curr) => acc + (curr.count || 0), 0);
-  let hours = Math.floor(totalMins / 60);
-  let mins = totalMins % 60;
-  return { 
-    durationStr: totalMins > 0 ? `${hours > 0 ? hours+'시간 ' : ''}${mins > 0 ? mins+'분' : ''}`.trim() : '-', 
-    totalCnt, totalAmt, 
-    perDelivery: totalCnt > 0 ? Math.round(totalAmt / totalCnt) : 0, 
-    hourlyRate: totalMins > 0 ? Math.round(totalAmt / (totalMins / 60)) : 0 
-  };
-};
-
-export const handleTouchStart = (e) => {
-  e.currentTarget.dataset.startY = e.touches[0].clientY;
-  e.currentTarget.style.transition = 'none'; 
-};
-
+// 터치 스와이프 관련 유틸
+export const handleTouchStart = (e) => { e.currentTarget.dataset.startY = e.touches[0].clientY; e.currentTarget.style.transition = 'none'; };
 export const handleTouchMove = (e) => {
   const startY = parseFloat(e.currentTarget.dataset.startY || 0);
   const currentY = e.touches[0].clientY;
   const swipeDistance = currentY - startY;
-  if (swipeDistance > 0) {
-    e.currentTarget.style.transform = `translateY(${swipeDistance}px)`;
-  }
+  if (swipeDistance > 0) e.currentTarget.style.transform = `translateY(${swipeDistance}px)`;
 };
-
 export const handleTouchEnd = (e, closeFunction) => {
   const startY = parseFloat(e.currentTarget.dataset.startY || 0);
   const currentY = e.changedTouches[0].clientY;
   const swipeDistance = currentY - startY;
   const modalHeight = e.currentTarget.clientHeight;
-
   e.currentTarget.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
   if (swipeDistance > modalHeight * 0.35) {
     e.currentTarget.style.transform = 'translateY(100%)';
@@ -192,7 +95,141 @@ export const handleTouchEnd = (e, closeFunction) => {
 };
 
 // ==========================================
-// 3. 로그인 및 회원가입 화면
+// 3. SUB-COMPONENTS
+// ==========================================
+
+// --- [정비 관리 뷰] ---
+function MaintenanceView({ user, userData }) {
+  const [list, setAllList] = useState([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
+  const items = ['엔진오일', '앞브레이크패드', '뒷브레이크패드', '벨트', '앞타이어', '뒷타이어', '배터리', '미션오일', '점화플러그'];
+
+  useEffect(() => {
+    const q = query(collection(db, 'maintenance'), where('userId', '==', user.uid), orderBy('date', 'desc'));
+    return onSnapshot(q, (s) => setAllList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, [user.uid]);
+
+  const handleSave = async () => {
+    if (!formData.item || !formData.cost) return alert("내용을 입력하세요.");
+    await addDoc(collection(db, 'maintenance'), { 
+      ...formData, 
+      userId: user.uid, 
+      cost: parseInt(formData.cost.replace(/,/g, '')),
+      mileage: parseInt(formData.mileage.replace(/,/g, '') || 0),
+      createdAt: serverTimestamp() 
+    });
+    setModalOpen(false); setStep(1); setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
+  };
+
+  return (
+    <div className="p-5 space-y-4 animate-in fade-in duration-500">
+      <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
+        <div><h3 className="text-sm font-black text-slate-400 mb-1">총 정비 지출</h3><p className="text-2xl font-black text-slate-800">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p></div>
+        <Wrench size={32} className="text-blue-100" />
+      </div>
+      <div className="space-y-3">
+        {list.map(m => (
+          <div key={m.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
+            <div><p className="text-xs font-bold text-slate-400">{m.date}</p><p className="font-black text-slate-800">{m.item}</p>{m.mileage > 0 && <p className="text-[10px] text-blue-500 font-bold">{formatLargeMoney(m.mileage)}km에 교체</p>}</div>
+            <div className="text-right"><p className="font-black text-slate-700">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1"><Trash2 size={14}/></button></div>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => setModalOpen(true)} className="fixed bottom-24 right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-lg flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-10 animate-in slide-in-from-bottom duration-300 border-t-8 border-slate-800">
+            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 shrink-0"></div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black">정비 내역 기록 ({step}/3)</h2>
+              <button onClick={() => {setModalOpen(false); setStep(1);}} className="p-2 bg-slate-100 rounded-full"><X size={20}/></button>
+            </div>
+            {step === 1 && (
+              <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-[45vh] p-1">
+                {items.map(i => (<button key={i} onClick={() => { setFormData({...formData, item: i}); setStep(2); }} className="py-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm active:bg-slate-800 active:text-white transition-colors">{i}</button>))}
+                <button onClick={() => { const v = prompt('정비 항목 직접 입력'); if(v) {setFormData({...formData, item: v}); setStep(2);}}} className="py-4 bg-white border-2 border-dashed border-slate-200 rounded-xl font-bold text-slate-400">직접입력</button>
+              </div>
+            )}
+            {step === 2 && (
+              <div className="space-y-6 text-center py-4">
+                <p className="font-black text-slate-500 text-lg">언제 정비하셨나요?</p>
+                <input type="date" value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})} className="w-full p-5 bg-slate-50 rounded-2xl text-center font-black text-2xl outline-none border-2 border-slate-100 focus:border-blue-500" />
+                <button onClick={() => setStep(3)} className="w-full py-5 bg-slate-800 text-white rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">다음 단계</button>
+              </div>
+            )}
+            {step === 3 && (
+              <div className="space-y-6 py-4">
+                <div><label className="text-xs font-black text-slate-400 ml-1 mb-2 block uppercase">정비 지출 비용 (원)</label><input type="text" inputMode="numeric" placeholder="0" value={formatLargeMoney(formData.cost)} onChange={e=>setFormData({...formData, cost: e.target.value.replace(/[^0-9]/g, '')})} className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none border-2 border-slate-100 focus:border-blue-500" /></div>
+                <div><label className="text-xs font-black text-slate-400 ml-1 mb-2 block uppercase">교체 당시 주행거리 (km) - 선택</label><input type="text" inputMode="numeric" placeholder="0" value={formatLargeMoney(formData.mileage)} onChange={e=>setFormData({...formData, mileage: e.target.value.replace(/[^0-9]/g, '')})} className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none border-2 border-slate-100 focus:border-blue-500" /></div>
+                <button onClick={handleSave} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">정비 기록 저장하기</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- [실시간 정보 공지방 (새벽 6시 초기화)] ---
+function InfoBoardView({ user, userData }) {
+  const [msg, setMsg] = useState('');
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [list, setList] = useState([]);
+  const tags = ['🚨단속/사고', '🚧도로통제', '⏳조리지연', '🍔꿀콜공유', '💬잡담'];
+
+  useEffect(() => {
+    const now = getKSTDate();
+    const resetTime = new Date(now);
+    if (now.getHours() < 6) resetTime.setDate(now.getDate() - 1);
+    resetTime.setHours(6, 0, 0, 0);
+    const q = query(collection(db, 'board'), where('createdAt', '>=', resetTime), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => setList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, []);
+
+  const handleSend = async () => {
+    if (!msg.trim()) return;
+    await addDoc(collection(db, 'board'), { text: msg.trim(), isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: new Date() });
+    setMsg(''); setIsUrgent(false);
+  };
+
+  const sortedList = [...list].sort((a,b) => (b.isUrgent ? 1 : 0) - (a.isUrgent ? 1 : 0));
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500">
+      <div className="flex-1 overflow-y-auto p-5 space-y-3 no-scrollbar pb-10">
+        {sortedList.length === 0 && <div className="py-20 text-center text-slate-300 font-bold text-sm">새벽 6시 이후 등록된 실시간 정보가 없습니다.</div>}
+        {sortedList.map(item => (
+          <div key={item.id} className={`p-4 rounded-2xl shadow-sm border transition-all ${item.isUrgent ? 'bg-rose-50 border-rose-200 ring-2 ring-rose-100' : 'bg-white border-slate-100'}`}>
+            <div className="flex justify-between items-start mb-2">
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${item.isUrgent ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>{item.isUrgent ? '📌 중요공지' : item.nickname}</span>
+              <span className="text-[9px] font-bold text-slate-400">{item.createdAt?.toDate ? formatTimeStr(item.createdAt.toDate()) : ''}</span>
+            </div>
+            <p className={`text-[14px] font-bold leading-relaxed ${item.isUrgent ? 'text-rose-700' : 'text-slate-700'}`}>{item.text}</p>
+            <div className="mt-3 flex gap-2">
+              <button onClick={() => updateDoc(doc(db, 'board', item.id), { likes: (item.likes || 0) + 1 })} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 flex items-center gap-1 active:scale-90"><ThumbsUp size={12}/> 확인요 {item.likes > 0 && item.likes}</button>
+              {item.userId === user.uid && <button onClick={() => deleteDoc(doc(db, 'board', item.id))} className="text-slate-300 ml-auto"><Trash2 size={12}/></button>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-4 bg-white border-t border-slate-200 space-y-3 shrink-0 pb-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
+        <div className="flex overflow-x-auto gap-2 no-scrollbar">
+          {tags.map(t => <button key={t} onClick={() => setMsg(prev => `${t} ${prev}`)} className="whitespace-nowrap px-3 py-1.5 bg-slate-50 rounded-full text-[10px] font-black text-slate-500 border border-slate-100 active:bg-slate-800 active:text-white transition-colors">{t}</button>)}
+        </div>
+        <div className="flex gap-2 items-center">
+          <button onClick={() => setIsUrgent(!isUrgent)} className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all ${isUrgent ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}><Megaphone size={18} /></button>
+          <input value={msg} onChange={e=>setMsg(e.target.value)} placeholder="실시간 도로 정보를 공유하세요" className="flex-1 bg-slate-50 p-3 h-11 rounded-xl text-sm font-bold outline-none border border-slate-100 focus:border-blue-400 focus:bg-white transition-all" />
+          <button onClick={handleSend} className="bg-blue-600 text-white h-11 px-4 rounded-xl font-black text-sm active:scale-95 transition-transform shadow-md">전송</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ==========================================
+// 4. 로그인 및 회원가입 화면
 // ==========================================
 function LoginScreen({ onLogin, onGoToRegister }) {
   const [loginId, setLoginId] = useState('');
@@ -213,7 +250,6 @@ function LoginScreen({ onLogin, onGoToRegister }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!loginId || !password) return alert("아이디와 비밀번호를 입력하세요.");
-    
     if (rememberMe) {
       localStorage.setItem('baesamo_saved_id', loginId);
       localStorage.setItem('baesamo_saved_pw', password);
@@ -221,12 +257,11 @@ function LoginScreen({ onLogin, onGoToRegister }) {
       localStorage.removeItem('baesamo_saved_id');
       localStorage.removeItem('baesamo_saved_pw');
     }
-
     onLogin(`${loginId.trim().toLowerCase()}@baesamo.com`, password);
   };
 
   return (
-    <div className="min-h-screen bg-blue-50 flex flex-col items-center justify-center p-6 text-center relative">
+    <div className="h-[100dvh] bg-blue-50 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
       <div className="text-6xl mb-4 animate-bounce">🛵</div>
       <h1 className="text-3xl font-black text-gray-800 mb-2 italic">BAESAMO PRO</h1>
       <p className="text-gray-500 text-xs mb-8 font-bold">배달을 사랑하는 모임 전용 수익 관리 앱</p>
@@ -266,9 +301,7 @@ function LoginScreen({ onLogin, onGoToRegister }) {
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-5">
            <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 text-left shadow-2xl relative">
               <button onClick={() => setShowInstallGuide(false)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 active:scale-95"><X size={20}/></button>
-              
               <h2 className="text-xl font-black text-gray-900 mb-6 mt-2 flex items-center gap-2">📱 앱으로 설치하기</h2>
-              
               <div className="space-y-6">
                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <h3 className="text-sm font-black text-blue-600 mb-2 flex items-center gap-1">🍎 아이폰 (Safari 브라우저)</h3>
@@ -287,7 +320,6 @@ function LoginScreen({ onLogin, onGoToRegister }) {
                     </ol>
                  </div>
               </div>
-
               <button onClick={() => setShowInstallGuide(false)} className="w-full bg-blue-600 text-white font-black text-sm py-4 rounded-2xl mt-6 shadow-md active:scale-95 transition-transform">확인했습니다</button>
            </div>
         </div>
@@ -308,7 +340,7 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-white p-6 pt-10 flex flex-col items-center overflow-y-auto">
+    <div className="h-[100dvh] bg-white p-6 pt-10 flex flex-col items-center overflow-y-auto">
       <h2 className="text-2xl font-black text-gray-800 mb-6 italic">가입 신청 ✍️</h2>
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 pb-10">
         <div className="bg-blue-50 p-5 rounded-3xl border border-blue-100 space-y-3">
@@ -328,10 +360,9 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
 }
 
 // ==========================================
-// 4. 배달 수익 관리 메인 뷰
+// 5. 배달 수익 관리 메인 뷰
 // ==========================================
 function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth }) {
-  const todayStr = getKSTDateStr();
   const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
 
   const [deliverySubTab, setDeliverySubTab] = useState('daily');
@@ -366,7 +397,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [editingDeliveryShift, setEditingDeliveryShift] = useState(null);
   
   const emptyForm = { 
-    date: todayStr, startTime: '', endTime: '', 
+    date: getWorkDateStr(), startTime: '', endTime: '', 
     useTwoPhones: false,
     mainBaeminAmt: '', mainBaeminCnt: '', mainCoupangAmt: '', mainCoupangCnt: '', 
     subBaeminAmt: '', subBaeminCnt: '', subCoupangAmt: '', subCoupangCnt: '' 
@@ -465,6 +496,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
 
   const pendingByPayday = useMemo(() => {
     const groups = {};
+    const todayStr = getKSTDateStr();
     (dailyDeliveries || []).forEach(d => {
       const pd = getPaydayStr(d.date);
       if (!pd || pd < todayStr) return; 
@@ -475,7 +507,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       groups[pd].items.push(d);
     });
     return groups;
-  }, [dailyDeliveries, todayStr]);
+  }, [dailyDeliveries]);
 
   const upcomingPaydays = Object.keys(pendingByPayday).sort();
   
@@ -493,7 +525,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     return groups;
   }, [dailyDeliveries]);
   
-  const pastPaydays = Object.keys(paydayGroups).filter(pd => pd < todayStr).sort((a,b) => b.localeCompare(a));
+  const pastPaydays = Object.keys(paydayGroups).filter(pd => pd < getKSTDateStr()).sort((a,b) => b.localeCompare(a));
 
   const monthlyMetrics = useMemo(() => getGroupMetrics(filteredDailyDeliveries), [filteredDailyDeliveries]);
   const yearlyItems = useMemo(() => (dailyDeliveries || []).filter(d => typeof d?.date === 'string' && d.date.startsWith(String(selectedYear))), [dailyDeliveries, selectedYear]);
@@ -691,7 +723,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const NetDiffInfo = ({ device, platform, inputAmt, inputCnt, date }) => {
      const saved = getTodaySaved(device, platform, date);
      if (saved.amt === 0 && saved.cnt === 0) return null;
-     
      const netAmt = Math.max(0, (parseInt(String(inputAmt).replace(/,/g,''))||0) - saved.amt);
      return (
          <div className="text-[11px] text-blue-600 ml-[68px] font-black flex items-center gap-1 mt-1 pb-1 tracking-tight">
@@ -701,7 +732,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   };
 
   return (
-    <div className="flex flex-col gap-2 pb-8 pt-1 animate-in fade-in duration-500 text-slate-800 min-h-[80vh] px-5">
+    <div className="flex flex-col gap-2 pb-8 pt-1 animate-in fade-in duration-500 text-slate-800 px-5">
       
       {recoveryShift && !timerActive && (
          <div className="bg-red-50 border border-red-200 rounded-2xl p-3 shadow-sm flex flex-col gap-2 animate-in slide-in-from-top-2 mt-2">
@@ -724,55 +755,54 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          </div>
       )}
 
-      {/* 프리미엄 타이머 카드 */}
+      {/* 💡 상단 프리미엄 타이머 카드 (UI 깨짐 방지 - whitespace-nowrap, shrink-0 적용) */}
       <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-2 ${timerActive ? (userData?.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
-        <div className="flex justify-between items-start">
-          <div className="flex items-center gap-3 ml-1">
-            <div className={`p-3 rounded-2xl ${timerActive ? 'bg-white/20 text-white animate-pulse shadow-inner' : 'bg-slate-700 text-slate-300 shadow-inner'}`}>
+        <div className="flex justify-between items-center">
+          
+          <div className="flex items-center gap-2.5 ml-1 shrink-0">
+            <div className={`p-3 rounded-2xl shrink-0 ${timerActive ? 'bg-white/20 text-white animate-pulse shadow-inner' : 'bg-slate-700 text-slate-300 shadow-inner'}`}>
                {userData?.isStealth ? <Ghost size={24} /> : <Timer size={24} />}
             </div>
-            <div>
-              <div className={`text-[11px] font-black flex items-center mb-0.5 ${timerActive ? 'text-blue-100' : 'text-slate-200'}`}>
-                {userData?.isStealth ? 'Stealth Mode On' : 'Live Tracking'}
-                {timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 ${userData?.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}
+            <div className="flex flex-col justify-center">
+              <div className={`text-[10px] font-black flex items-center mb-0.5 whitespace-nowrap ${timerActive ? 'text-blue-100' : 'text-slate-200'}`}>
+                {userData?.isStealth ? 'Stealth Mode' : 'Live Tracking'}
+                {timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 mr-1.5 ${userData?.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}
                 {userData?.trackingStartTime && timerActive && (
-                   <span className="ml-2 text-[10px] text-blue-100 font-bold bg-white/10 px-1.5 py-0.5 rounded shadow-sm border border-blue-300/30 tracking-tighter">
+                   <span className="text-[9px] text-blue-100 font-bold bg-white/10 px-1.5 py-0.5 rounded shadow-sm border border-blue-300/30 whitespace-nowrap tracking-tight">
                        {formatTimeStr(new Date(userData.trackingStartTime))} 시작
                    </span>
                 )}
               </div>
-              <div className={`text-[32px] font-black tracking-tighter leading-none text-white drop-shadow-md`}>
+              <div className={`text-[30px] font-black tracking-tighter leading-none whitespace-nowrap text-white drop-shadow-md`}>
                  {timerActive && userData?.trackingStartTime ? `${Math.floor(elapsedSeconds/3600).toString().padStart(2,'0')}:${String(Math.floor((elapsedSeconds%3600)/60)).padStart(2,'0')}:${String(elapsedSeconds%60).padStart(2,'0')}` : '00:00:00'}
               </div>
             </div>
           </div>
-          <div className="flex flex-col gap-2 items-end">
+          
+          <div className="flex flex-col gap-2 items-end shrink-0">
              <button onClick={() => { 
                if(timerActive) {
-                 const now = new Date();
+                 const now = getKSTDate();
                  const timeNow = formatTimeStr(now);
                  let startStr = timeNow;
                  if (userData?.trackingStartTime) {
                      const startObj = new Date(userData.trackingStartTime);
-                     if (!isNaN(startObj.getTime())) {
-                         startStr = formatTimeStr(startObj);
-                     }
+                     if (!isNaN(startObj.getTime())) startStr = formatTimeStr(startObj);
                  }
-                 const startDateStr = getKSTDateStr();
-                 
                  setEditingDeliveryShift(null);
-                 setDeliveryFormData({ ...emptyForm, date: startDateStr, startTime: startStr, endTime: timeNow });
+                 setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow });
                  setSplitQueue([]);
                  setIsDeliveryModalOpen(true);
                } else {
                  handleStartDelivery();
                }
-             }} className={`px-5 py-3 rounded-[1.2rem] font-black text-sm shadow-md transition-all active:scale-95 ${timerActive ? 'bg-white text-blue-700 hover:bg-blue-50' : 'bg-white/20 text-white border border-white/20 hover:bg-white/30'}`}>
+             }} className={`px-4 py-2.5 rounded-[1rem] font-black text-[13px] shadow-md transition-all active:scale-95 whitespace-nowrap shrink-0 ${timerActive ? 'bg-white text-blue-700 hover:bg-blue-50' : 'bg-white/20 text-white border border-white/20 hover:bg-white/30'}`}>
                {timerActive ? '마감하기' : '배달 시작'}
              </button>
+             
              {/* 스텔스 토글 버튼 */}
              {timerActive && (
-               <button onClick={toggleStealth} className={`text-[10px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData?.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
+               <button onClick={toggleStealth} className={`whitespace-nowrap shrink-0 text-[9px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData?.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
                   <Ghost size={12}/> {userData?.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
                </button>
              )}
@@ -840,7 +870,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
             // 💡 월별 목표 로직 계산
             const goal = userData?.deliveryGoals?.[currentMonthKey] || 0;
             const pct = goal > 0 ? Math.min(100, (deliveryFilteredTotal / goal) * 100) : 0;
-            const todayObj = new Date();
+            const todayObj = getKSTDate();
             let remainingDays = 0;
             if (selectedYear === todayObj.getFullYear() && selectedMonth === (todayObj.getMonth() + 1)) {
                 const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -1001,7 +1031,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                  if(!d) return <div key={`empty-${i}`} className="h-[65px] bg-slate-50 rounded-xl border border-slate-100"></div>;
                  const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                  const dayData = dataByDate[dateStr] || { amt: 0 };
-                 const isToday = dateStr === todayStr;
+                 const isToday = dateStr === getKSTDateStr();
                  const dayIndex = (i % 7);
                  const isRed = dayIndex === 0;
                  const isBlue = dayIndex === 6;
@@ -1355,7 +1385,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       })()}
 
       <button onClick={() => { 
-        const now = new Date();
+        const now = getKSTDate();
         const timeNow = formatTimeStr(now);
         let startStr = timeNow;
         if (userData?.trackingStartTime) {
@@ -1364,12 +1394,11 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 startStr = formatTimeStr(startObj);
             }
         }
-        const startDateStr = getKSTDateStr();
         
         setEditingDeliveryShift(null);
         setDeliveryFormData({ 
           ...emptyForm, 
-          date: startDateStr,
+          date: getWorkDateStr(),
           startTime: startStr,
           endTime: timeNow
         });
@@ -1430,11 +1459,11 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 </div>
                 <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
                   <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>시작</label>
-                  <input type="time" step="1" value={deliveryFormData.startTime} onChange={e=>setDeliveryFormData({...deliveryFormData, startTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
+                  <input type="time" step="1" value={deliveryFormData.startTime} onChange={e=>setDeliveryFormData({...formData, startTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
                 </div>
                 <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
                   <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>종료</label>
-                  <input type="time" step="1" value={deliveryFormData.endTime} onChange={e=>setDeliveryFormData({...deliveryFormData, endTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
+                  <input type="time" step="1" value={deliveryFormData.endTime} onChange={e=>setDeliveryFormData({...formData, endTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
                 </div>
               </div>
 
@@ -1468,26 +1497,26 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
               </div>
               
               {/* 🛵 쿠팡 입력 폼 */}
-              <div className="bg-white p-4 rounded-[1.2rem] shadow-sm border border-slate-200">
-                <div className="font-black text-blue-600 text-[13px] mb-3 flex items-center gap-1.5"><Bike size={14}/> 쿠팡이츠</div>
+              <div className="bg-slate-900/5 p-4 rounded-[1.2rem] shadow-sm border border-slate-900/10">
+                <div className="font-black text-slate-700 text-[13px] mb-3 flex items-center gap-1.5"><Bike size={14}/> 쿠팡이츠</div>
                 <div className="space-y-3">
                    <div className="flex flex-col gap-1">
                      <div className="flex gap-2 items-center w-full">
-                        <span className="w-[60px] shrink-0 text-[12px] font-black text-slate-600 bg-slate-50 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-100">{userData.nickname}</span>
-                        <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.mainCoupangAmt ? formatLargeMoney(deliveryFormData.mainCoupangAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, mainCoupangAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="총액" className="flex-[7] min-w-0 text-[17px] font-black bg-slate-50 rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
-                        <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.mainCoupangCnt} onChange={e => setDeliveryFormData({...deliveryFormData, mainCoupangCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[17px] font-black bg-slate-50 rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
+                        <span className="w-[60px] shrink-0 text-[12px] font-black text-slate-600 bg-white rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-200">{userData.nickname}</span>
+                        <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.mainCoupangAmt ? formatLargeMoney(deliveryFormData.mainCoupangAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, mainCoupangAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="총액" className="flex-[7] min-w-0 text-[17px] font-black bg-white rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
+                        <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.mainCoupangCnt} onChange={e => setDeliveryFormData({...deliveryFormData, mainCoupangCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[17px] font-black bg-white rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
                      </div>
                      <NetDiffInfo device="main" platform="쿠팡" inputAmt={deliveryFormData.mainCoupangAmt} inputCnt={deliveryFormData.mainCoupangCnt} date={deliveryFormData.date} />
                   </div>
 
                   {deliveryFormData.useTwoPhones && (
                     <>
-                      <div className="w-full border-t border-slate-100"></div>
+                      <div className="w-full border-t border-slate-200"></div>
                       <div className="flex flex-col gap-1 animate-in fade-in">
                         <div className="flex gap-2 items-center w-full">
-                            <span className="w-[60px] shrink-0 text-[11px] font-black text-slate-500 bg-slate-100 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-200 shadow-inner">투폰(서브)</span>
-                            <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subCoupangAmt ? formatLargeMoney(deliveryFormData.subCoupangAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, subCoupangAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="서브 총액" className="flex-[7] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
-                            <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subCoupangCnt} onChange={e => setDeliveryFormData({...deliveryFormData, subCoupangCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
+                            <span className="w-[60px] shrink-0 text-[11px] font-black text-slate-500 bg-slate-200/50 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-300 shadow-inner">투폰(서브)</span>
+                            <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subCoupangAmt ? formatLargeMoney(deliveryFormData.subCoupangAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, subCoupangAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="서브 총액" className="flex-[7] min-w-0 text-[15px] font-black bg-white rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
+                            <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subCoupangCnt} onChange={e => setDeliveryFormData({...deliveryFormData, subCoupangCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[15px] font-black bg-white rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
                         </div>
                         <NetDiffInfo device="sub" platform="쿠팡" inputAmt={deliveryFormData.subCoupangAmt} inputCnt={deliveryFormData.subCoupangCnt} date={deliveryFormData.date} />
                       </div>
@@ -1496,15 +1525,8 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 </div>
               </div>
 
-              {!deliveryFormData.useTwoPhones && (
-                  <button type="button" onClick={() => setDeliveryFormData({...deliveryFormData, useTwoPhones: true})} className="w-full mt-2 bg-slate-200/50 hover:bg-slate-200 text-slate-600 font-black text-[13px] py-3 rounded-[1rem] transition-colors border border-slate-300/50 shadow-sm border-dashed">
-                      + 투폰(공기계) 실적 추가하기 📱
-                  </button>
-              )}
-              
-              <button type="submit" disabled={!(deliveryFormData.mainBaeminAmt || deliveryFormData.mainCoupangAmt || deliveryFormData.subBaeminAmt || deliveryFormData.subCoupangAmt)} className="w-full shrink-0 h-[56px] flex items-center justify-center bg-blue-600 mt-5 rounded-[1.2rem] text-white font-black text-lg active:scale-95 shadow-md hover:bg-blue-700 transition-all disabled:opacity-50 border border-blue-700">
-                {editingDeliveryShift ? '수정 완료' : splitQueue.length > 0 ? '저장하고 다음 타임 쓰기' : '마감 저장'}
-              </button>
+              {!formData.useTwoPhones && <button type="button" onClick={()=>setFormData({...formData, useTwoPhones: true})} className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-xs font-black text-slate-400">+ 투폰(서브기기) 기록 추가</button>}
+              <button type="submit" disabled={!(formData.mainBaeminAmt || formData.mainCoupangAmt || formData.subBaeminAmt || formData.subCoupangAmt)} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all disabled:opacity-50">정산 완료 저장</button>
             </form>
           </div>
         </div>
@@ -1513,453 +1535,4 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   );
 }
 
-// ==========================================
-// 5. 운행 현황 뷰 (실시간)
-// ==========================================
-function StatusView({ allUsers }) {
-  const activeRiders = allUsers.filter(u => u.isRiding && !u.isStealth);
-  const stealthCount = allUsers.filter(u => u.isRiding && u.isStealth).length;
-  const inactiveRiders = allUsers.filter(u => !u.isRiding || u.isStealth);
-
-  const getBikeFourDigits = (bikeNumber) => {
-    if (!bikeNumber) return '????';
-    const match = bikeNumber.match(/\d{4}$/);
-    return match ? match[0] : bikeNumber.slice(-4);
-  };
-
-  return (
-    <div className="px-5 pt-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 pb-24">
-      {/* 액티브 (운행 중) 섹션 */}
-      <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-blue-100">
-        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
-          <span className="flex items-center gap-1.5"><Bike size={18}/> 🚀 현재 운행 중인 라이더</span>
-          <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[11px]">
-             {activeRiders.length}명 {stealthCount > 0 && <span className="text-gray-500 ml-1">+ 스텔스 {stealthCount}명</span>}
-          </span>
-        </h2>
-        
-        <div className="space-y-2">
-          {activeRiders.length === 0 ? (
-            <div className="text-center py-6 text-gray-400 font-bold text-sm bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-               지금 배달 중인 멤버가 없습니다.
-            </div>
-          ) : (
-            activeRiders.map(rider => (
-              <div key={rider.uid} className="flex justify-between items-center bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
-                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-black shadow-md shadow-blue-200 shrink-0">
-                      {rider.nickname.slice(0,1)}
-                    </div>
-                    <div className="font-black text-gray-800 text-base">
-                      {rider.nickname} <span className="text-blue-500 font-bold text-sm">({getBikeFourDigits(rider.bikeNumber)})</span>
-                    </div>
-                 </div>
-                 <div className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border border-blue-200 shadow-sm">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                    </span>
-                    <span className="text-[10px] font-black text-red-500 uppercase">On</span>
-                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* 인액티브 (비운행) 섹션 */}
-      <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100">
-        <h2 className="text-sm font-black text-gray-500 mb-4 flex items-center justify-between">
-          <span className="flex items-center gap-1.5"><Users size={18}/> ☕ 휴식 중인 라이더</span>
-          <span className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-[11px]">{inactiveRiders.length}명</span>
-        </h2>
-        
-        <div className="grid grid-cols-2 gap-2">
-          {inactiveRiders.map(rider => (
-            <div key={rider.uid} className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl border border-gray-100 opacity-60">
-               <div className="w-6 h-6 bg-gray-300 text-white rounded-full flex items-center justify-center font-black text-[10px]">
-                 {rider.nickname.slice(0,1)}
-               </div>
-               <div className="font-bold text-gray-700 text-xs truncate">
-                 {rider.nickname} <span className="text-[10px] text-gray-400">({getBikeFourDigits(rider.bikeNumber)})</span>
-               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 6. 관리자 전용 뷰 (멤버 수익 랭킹)
-// ==========================================
-function AdminView({ allUsers }) {
-  const [allDeliveries, setAllDeliveries] = useState([]);
-  const todayStr = getKSTDateStr();
-  const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
-  const [selectedMonth, setSelectedMonth] = useState(parseInt(todayStr.slice(5, 7)));
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'delivery'), (s) => {
-       setAllDeliveries(s.docs.map(doc => doc.data()));
-    });
-    return () => unsub();
-  }, []);
-
-  const monthPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
-
-  const leaderboard = useMemo(() => {
-     const stats = {};
-     allUsers.forEach(u => {
-        stats[u.uid] = { nickname: u.nickname, name: u.name, totalAmt: 0, totalCnt: 0, uid: u.uid };
-     });
-     
-     allDeliveries.forEach(d => {
-        if (d.date && d.date.startsWith(monthPrefix) && stats[d.userId]) {
-           stats[d.userId].totalAmt += (d.amount || 0);
-           stats[d.userId].totalCnt += (d.count || 0);
-        }
-     });
-
-     return Object.values(stats).sort((a, b) => b.totalAmt - a.totalAmt);
-  }, [allDeliveries, allUsers, monthPrefix]);
-
-  const totalGroupAmt = leaderboard.reduce((sum, user) => sum + user.totalAmt, 0);
-  const totalGroupCnt = leaderboard.reduce((sum, user) => sum + user.totalCnt, 0);
-
-  return (
-    <div className="px-5 pt-6 space-y-6 pb-24 animate-in fade-in slide-in-from-bottom-4">
-      <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-[2rem] p-6 text-white shadow-lg relative overflow-hidden">
-        <Crown className="absolute -right-4 -bottom-4 w-32 h-32 opacity-20 rotate-12" fill="white" />
-        <div className="relative z-10">
-          <div className="flex justify-between items-center mb-4">
-             <button onClick={() => setSelectedMonth(m => m === 1 ? 12 : m - 1)} className="p-1.5 bg-white/20 rounded-xl active:scale-95"><ChevronLeft size={16}/></button>
-             <span className="font-black text-lg">{selectedYear}년 {selectedMonth}월 랭킹</span>
-             <button onClick={() => setSelectedMonth(m => m === 12 ? 1 : m + 1)} className="p-1.5 bg-white/20 rounded-xl active:scale-95"><ChevronRight size={16}/></button>
-          </div>
-          <div className="text-orange-100 text-[11px] font-bold mb-1 tracking-tight">이번 달 멤버 전체 합산 수익</div>
-          <div className="text-[36px] font-black tracking-tighter leading-none mb-1">{formatLargeMoney(totalGroupAmt)}<span className="text-base ml-1 opacity-80">원</span></div>
-          <div className="text-xs font-bold text-orange-200">총 {formatLargeMoney(totalGroupCnt)}건 배달 완료 🛵</div>
-        </div>
-      </div>
-
-      <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-orange-100">
-        <h2 className="text-sm font-black text-orange-600 mb-4 flex items-center gap-1.5"><Trophy size={18}/> 이번 달 명예의 전당</h2>
-        <div className="space-y-3">
-          {leaderboard.map((user, index) => {
-            const rank = index + 1;
-            let rankBadge = "bg-gray-100 text-gray-500 border-gray-200";
-            if (rank === 1) rankBadge = "bg-yellow-100 text-yellow-600 border-yellow-300 shadow-sm";
-            if (rank === 2) rankBadge = "bg-slate-100 text-slate-500 border-slate-300 shadow-sm";
-            if (rank === 3) rankBadge = "bg-orange-100 text-orange-700 border-orange-300 shadow-sm";
-
-            return (
-              <div key={user.uid} className={`flex items-center justify-between p-4 rounded-2xl border ${rank === 1 ? 'border-yellow-200 bg-yellow-50/30' : 'border-gray-100 bg-gray-50/50'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[13px] border ${rankBadge}`}>
-                    {rank}
-                  </div>
-                  <div>
-                    <div className="font-black text-gray-800 text-[15px]">{user.nickname}</div>
-                    <div className="text-[10px] font-bold text-gray-400">{user.totalCnt}건 완료</div>
-                  </div>
-                </div>
-                <div className={`font-black text-[17px] tracking-tight ${rank === 1 ? 'text-yellow-600' : 'text-gray-700'}`}>
-                  {formatLargeMoney(user.totalAmt)}원
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// [메인 앱 (App Component)]
-// ==========================================
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [userData, setUserData] = useState(null);
-  const [allUsers, setAllUsers] = useState([]);
-  const [pendingUsers, setPendingUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showRegister, setShowRegister] = useState(false);
-  const [activeTab, setActiveTab] = useState('delivery');
-  const [dailyDeliveries, setDailyDeliveries] = useState([]);
-  const [globalNotice, setGlobalNotice] = useState(null);
-
-  // 헤더에 종속될 월/연도 상태
-  const todayStr = getKSTDateStr();
-  const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
-  const [selectedMonth, setSelectedMonth] = useState(parseInt(todayStr.slice(5, 7)));
-
-  useEffect(() => {
-    const meta = document.createElement('meta');
-    meta.name = "viewport";
-    meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no";
-    document.getElementsByTagName('head')[0].appendChild(meta);
-
-    const preventZoom = (e) => {
-      if (e.touches.length > 1) {
-        e.preventDefault();
-      }
-    };
-    document.addEventListener('touchstart', preventZoom, { passive: false });
-    return () => document.removeEventListener('touchstart', preventZoom);
-  }, []);
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        onSnapshot(userDocRef, (docSnap) => {
-          if (docSnap.exists()) setUserData(docSnap.data());
-          setLoading(false);
-        });
-
-        const approvedQuery = query(collection(db, 'users'), where('status', 'in', ['approved', 'admin']));
-        onSnapshot(approvedQuery, (s) => {
-           const users = s.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-           setAllUsers(users);
-        });
- 
-        const q = query(collection(db, 'delivery'), where('userId', '==', currentUser.uid));
-        onSnapshot(q, (s) => {
-          const docs = s.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setDailyDeliveries(docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse());
-        });
-
-        onSnapshot(doc(db, 'settings', 'globalNotice'), (s) => {
-          if (s.exists()) setGlobalNotice(s.data());
-          else setGlobalNotice(null);
-        });
-
-      } else {
-        setUser(null); setUserData(null); setAllUsers([]); setPendingUsers([]); setGlobalNotice(null); setLoading(false);
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  const isAdmin = userData?.status === 'admin' || userData?.isAdmin === true;
-
-  useEffect(() => {
-    if (isAdmin) {
-      const pendingQuery = query(collection(db, 'users'), where('status', '==', 'pending'));
-      const unsubPending = onSnapshot(pendingQuery, (s) => {
-         const pUsers = s.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-         setPendingUsers(pUsers);
-      });
-      return () => unsubPending();
-    } else {
-      setPendingUsers([]);
-    }
-  }, [isAdmin]);
-
-  const handleRegister = async (data) => {
-    try {
-      const res = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      await setDoc(doc(db, 'users', res.user.uid), { ...data, status: 'pending' });
-      alert("신청 완료! 승인 대기 상태입니다.");
-      setShowRegister(false);
-    } catch (err) { alert(`[가입에러] 내용: ${err.message}`); }
-  };
-
-  const handleApproveUser = async (targetUid) => {
-    if (!window.confirm('이 사용자의 가입을 승인하시겠습니까?')) return;
-    await updateDoc(doc(db, 'users', targetUid), { status: 'approved' });
-    alert('승인되었습니다!');
-  };
-
-  const handleRejectUser = async (targetUid) => {
-    if (!window.confirm('가입을 거절하고 이 데이터를 삭제하시겠습니까?')) return;
-    await deleteDoc(doc(db, 'users', targetUid));
-    alert('거절(삭제) 되었습니다.');
-  };
-
-  // 💡 공지사항: 누구나 클릭해서 작성 가능 (자정 자동 초기화)
-  const displayNotice = globalNotice?.date === todayStr ? globalNotice?.text : '';
-  const handleEditNotice = async () => {
-    const newText = prompt("🚨 오늘의 중요 공지를 입력하세요 (경찰 단속, 빙판길 등)\n\n※ 자정이 지나면 자동으로 사라집니다.\n※ 내용을 모두 지우고 확인을 누르면 공지가 숨겨집니다.", displayNotice || '');
-    if (newText !== null) {
-      await setDoc(doc(db, 'settings', 'globalNotice'), {
-        text: newText.trim(), date: todayStr, updatedAt: new Date().toISOString(), updatedBy: userData.nickname
-      });
-    }
-  };
-
-  // 월별 목표 금액 저장 로직 (설정 탭에서 사용)
-  const handleSaveGoal = async () => {
-     const val = prompt(`🎯 ${selectedYear}년 ${selectedMonth}월 목표 금액을 숫자로 입력하세요.`, userData?.deliveryGoals?.[`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`] || '');
-     if (val !== null) {
-        const goalNum = parseInt(val.replace(/[^0-9]/g, '')) || 0;
-        const newGoals = { ...(userData?.deliveryGoals || {}), [`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`]: goalNum };
-        await updateDoc(doc(db, 'users', user.uid), { deliveryGoals: newGoals });
-        alert("목표가 설정되었습니다!");
-     }
-  };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center font-black text-blue-500 text-2xl bg-blue-50">🛵 로딩 중...</div>;
-
-  if (!user) {
-    if (showRegister) return <RegisterScreen onBackToLogin={() => setShowRegister(false)} onRegister={handleRegister} />;
-    return <LoginScreen onGoToRegister={() => setShowRegister(true)} onLogin={async (e, p) => {
-      try { await signInWithEmailAndPassword(auth, e, p); } catch (err) { alert("로그인 실패: 아이디 또는 비밀번호를 확인하세요."); }
-    }} />;
-  }
-
-  if (!userData || userData.status === 'pending') return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
-      <div className="text-7xl mb-6 animate-bounce">⏳</div>
-      <h2 className="text-2xl font-black text-gray-800 mb-2">승인 대기 중</h2>
-      <p className="text-gray-500 font-bold mb-1">관리자의 승인을 기다려주세요!</p>
-      <p className="text-xs text-gray-400 mb-8">{userData?.nickname} / {userData?.bikeNumber}</p>
-      <button onClick={() => signOut(auth)} className="text-gray-400 font-bold border border-gray-200 px-6 py-2 rounded-xl active:bg-gray-100">임시 로그아웃</button>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans select-none overflow-hidden flex flex-col">
-      
-      {/* 💡 상단 고정 헤더 & 월별 네비게이션 */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 shrink-0">
-        <header className="px-5 pt-10 pb-3 flex justify-between items-center">
-          <div>
-            <span className="text-[10px] font-black text-blue-500 block mb-0.5 uppercase tracking-widest italic">Delivery Pro</span>
-            <h1 className="text-xl font-black">BAESAMO PRO</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-slate-50 rounded-full px-3 py-1.5 text-sm font-black text-slate-700 border border-slate-200 shadow-inner">
-               <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-slate-200 rounded-full active:scale-95"><ChevronLeft size={16}/></button>
-               <span className="mx-2">{selectedYear}년</span>
-               <button onClick={() => setSelectedYear(selectedYear + 1)} className="p-1 hover:bg-slate-200 rounded-full active:scale-95"><ChevronRight size={16}/></button>
-            </div>
-            <button onClick={() => setActiveTab('settings')} className="p-2.5 rounded-full bg-slate-50 border border-slate-200 text-slate-500 active:scale-95 shadow-inner">
-               <Settings size={18}/>
-            </button>
-          </div>
-        </header>
-
-        {/* 월별 스크롤 버블 */}
-        <div className="flex overflow-x-auto no-scrollbar gap-2 px-5 pb-3">
-          {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-            <button key={m} onClick={() => setSelectedMonth(m)} className={`flex-none px-5 py-2 rounded-full font-black text-sm transition-all shadow-sm border ${selectedMonth === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
-               {m}월
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 💡 스크롤 되는 메인 컨텐츠 영역 */}
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-24">
-        {/* 누구나 작성 가능한 긴급 공지사항 배너 */}
-        {(displayNotice || activeTab === 'delivery') && activeTab !== 'admin' && (
-          <div className="max-w-md mx-auto px-5 pt-4 shrink-0">
-             <div onClick={handleEditNotice} className={`relative overflow-hidden rounded-2xl p-3 flex items-center gap-3 shadow-sm border transition-all cursor-pointer active:scale-95 hover:brightness-95 ${displayNotice ? 'bg-red-50 border-red-200' : 'bg-white border-dashed border-slate-300'}`}>
-                <div className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full shadow-inner ${displayNotice ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-200 text-white'}`}><AlertCircle size={18} /></div>
-                <div className="flex-1 min-w-0">
-                  {displayNotice ? (<div className="font-black text-red-600 text-[13px] leading-snug break-keep">{displayNotice}</div>) : (<div className="font-bold text-slate-400 text-[12px]">+ 오늘의 긴급 단속/기상 공지 등록</div>)}
-                </div>
-                <Edit3 size={14} className={`shrink-0 ${displayNotice ? 'text-red-300' : 'text-slate-300'}`} />
-             </div>
-          </div>
-        )}
-
-        <main className="max-w-md mx-auto relative min-h-[80vh]">
-          {activeTab === 'delivery' && (
-            <DeliveryView user={user} userData={userData} dailyDeliveries={dailyDeliveries} selectedYear={selectedYear} selectedMonth={selectedMonth} />
-          )}
-
-          {activeTab === 'status' && (
-            <StatusView allUsers={allUsers} />
-          )}
-
-          {activeTab === 'admin' && isAdmin && (
-            <AdminView allUsers={allUsers} />
-          )}
-
-          {activeTab === 'settings' && (
-            <div className="px-5 pt-6 animate-in fade-in slide-in-from-right-4 space-y-4 pb-10">
-              <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 text-center space-y-6">
-                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner border border-blue-100">🛵</div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-800">{userData.nickname}</h2>
-                  <p className="text-sm font-bold text-slate-400 mt-1">{userData.name} · {userData.bikeNumber}</p>
-                  <div className="mt-4 inline-flex items-center gap-1 bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-black border border-green-200">
-                    {isAdmin ? '👑 방장 (관리자)' : '승인된 정식 멤버'}
-                  </div>
-                </div>
-                <button onClick={() => signOut(auth)} className="w-full bg-slate-50 text-slate-500 py-4 rounded-2xl font-black border border-slate-200 active:scale-95 transition-transform hover:bg-slate-100">안전하게 로그아웃</button>
-              </div>
-
-              {/* 월별 목표 금액 설정 버튼 */}
-              <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 animate-in slide-in-from-bottom-4">
-                 <h3 className="text-sm font-black text-blue-600 mb-3 flex items-center gap-1.5"><Target size={16}/> 월별 목표 금액 설정</h3>
-                 <p className="text-xs font-bold text-slate-500 mb-4">이번 달 배달 수익 목표를 설정하고 달성률 바를 확인하세요!</p>
-                 <button onClick={handleSaveGoal} className="w-full bg-blue-50 text-blue-600 border border-blue-200 py-3.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">
-                    🎯 {selectedMonth}월 목표 설정하기
-                 </button>
-              </div>
-
-              {isAdmin && (
-                <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-blue-200 animate-in slide-in-from-bottom-4">
-                   <h3 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">👑 가입 승인 대기열</span>
-                      <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[10px]">{pendingUsers.length}명 대기중</span>
-                   </h3>
-                   <div className="space-y-3">
-                      {pendingUsers.length === 0 ? (
-                        <div className="text-center py-6 text-slate-400 font-bold text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">가입 승인을 대기 중인 멤버가 없습니다.</div>
-                      ) : (
-                        pendingUsers.map(pUser => (
-                          <div key={pUser.uid} className="flex flex-col gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm">
-                             <div className="flex justify-between items-start">
-                                <div>
-                                  <div className="font-black text-slate-800 text-base">{pUser.nickname} <span className="text-xs font-bold text-slate-500">({pUser.name})</span></div>
-                                  <div className="text-[11px] font-bold text-slate-500 mt-1">오토바이: {pUser.bikeNumber}</div>
-                                  <div className="text-[11px] font-bold text-slate-500">출생년도: {pUser.birthYear}년생 ({pUser.age}세)</div>
-                                </div>
-                             </div>
-                             <div className="flex gap-2 mt-1">
-                                <button onClick={() => handleApproveUser(pUser.uid)} className="flex-[2] bg-blue-600 text-white py-2.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">승인하기</button>
-                                <button onClick={() => handleRejectUser(pUser.uid)} className="flex-1 bg-white text-rose-500 border border-rose-200 py-2.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">거절/삭제</button>
-                             </div>
-                          </div>
-                        ))
-                      )}
-                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* 💡 하단 탭바 고정 */}
-      <div className="fixed bottom-6 left-0 right-0 pointer-events-none z-50">
-        <nav className="mx-auto max-w-sm pointer-events-auto h-[72px] bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full border border-slate-200/60 flex justify-around items-center px-4">
-          <button onClick={() => setActiveTab('delivery')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'delivery' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-            <Target size={24} className="mb-1" /><span className="text-[10px] font-black">수익</span>
-          </button>
-          <button onClick={() => setActiveTab('status')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'status' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-            <Users size={24} className="mb-1" /><span className="text-[10px] font-black">현황</span>
-          </button>
-          
-          {isAdmin && (
-            <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'admin' ? 'text-orange-500 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-              <Crown size={24} className="mb-1" /><span className="text-[10px] font-black">랭킹</span>
-            </button>
-          )}
-
-          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'settings' ? 'text-slate-800 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-            <Settings size={24} className="mb-1" /><span className="text-[10px] font-black">설정</span>
-          </button>
-        </nav>
-      </div>
-    </div>
-  );
-}
+export default App;
