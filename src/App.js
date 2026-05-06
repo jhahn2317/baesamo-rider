@@ -192,47 +192,86 @@ function MaintenanceView({ user }) {
   const items = ['엔진오일', '앞브레이크패드', '뒷브레이크패드', '벨트', '앞타이어', '뒷타이어', '배터리', '미션오일', '점화플러그'];
 
   useEffect(() => {
-    const q = query(collection(db, 'maintenance'), where('userId', '==', user.uid), orderBy('date', 'desc'));
-    return onSnapshot(q, (s) => setAllList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    if (!user?.uid) return;
+
+    // 💡 1단계: 에러 추적을 위해 쿼리 단순화 (정렬을 일단 뺍니다)
+    const q = query(
+      collection(db, 'maintenance'), 
+      where('userId', '==', user.uid)
+    );
+
+    const unsub = onSnapshot(q, (s) => {
+      // 💡 2단계: 가져온 데이터를 날짜순으로 직접 정렬 (인덱스 에러 방지)
+      const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      data.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setAllList(data);
+    }, (err) => {
+      alert("데이터를 가져오지 못했습니다: " + err.message);
+    });
+
+    return () => unsub();
   }, [user.uid]);
 
   const handleSave = async () => {
     if (!formData.item || !formData.cost) return alert("정비 항목과 비용을 모두 입력해주세요!");
     
     try {
+      // 💡 3단계: 전송 데이터 강제 확인
+      const costValue = parseInt(String(formData.cost).replace(/[^0-9]/g, '')) || 0;
+      const mileageValue = parseInt(String(formData.mileage).replace(/[^0-9]/g, '')) || 0;
+
       await addDoc(collection(db, 'maintenance'), { 
         item: formData.item,
         date: formData.date,
-        cost: parseInt(String(formData.cost).replace(/,/g, '')) || 0,
-        mileage: parseInt(String(formData.mileage).replace(/,/g, '')) || 0,
+        cost: costValue,
+        mileage: mileageValue,
         userId: user.uid, 
         createdAt: serverTimestamp() 
       });
+      
+      alert("✅ 저장되었습니다!"); // 팝업으로 성공 확인
       setModalOpen(false); 
       setStep(1); 
       setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
     } catch (error) {
-      console.error("저장 에러:", error);
-      alert(`[저장 실패] 파이어베이스 규칙을 확인하세요!\n내용: ${error.message}`);
+      alert(`[저장 실패] 사유: ${error.message}`);
     }
   };
 
   return (
     <div className="p-5 space-y-4 animate-in fade-in duration-500 pb-28">
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
-        <div><h3 className="text-sm font-black text-slate-400 mb-1">총 정비 지출</h3><p className="text-2xl font-black text-slate-800">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p></div>
+        <div>
+          <h3 className="text-sm font-black text-slate-400 mb-1">총 정비 지출</h3>
+          <p className="text-2xl font-black text-slate-800">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p>
+        </div>
         <Wrench size={32} className="text-blue-100" />
       </div>
+
       <div className="space-y-3">
-        {list.length === 0 && <div className="text-center py-10 text-slate-400 font-bold text-sm bg-white rounded-2xl border border-dashed border-slate-200">등록된 정비 내역이 없습니다.</div>}
-        {list.map(m => (
-          <div key={m.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
-            <div><p className="text-xs font-bold text-slate-400">{m.date}</p><p className="font-black text-slate-800">{m.item}</p>{m.mileage > 0 && <p className="text-[10px] text-blue-500 font-bold">{formatLargeMoney(m.mileage)}km에 교체</p>}</div>
-            <div className="text-right"><p className="font-black text-slate-700">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1"><Trash2 size={14}/></button></div>
+        {list.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-[2rem] border border-dashed border-slate-200">
+             <Wrench className="mx-auto text-slate-200 mb-2" size={40}/>
+             <p className="text-slate-400 font-bold text-sm">등록된 정비 내역이 없습니다.</p>
           </div>
-        ))}
+        ) : (
+          list.map(m => (
+            <div key={m.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400">{m.date}</p>
+                <p className="font-black text-slate-800">{m.item}</p>
+                {m.mileage > 0 && <p className="text-[10px] text-blue-500 font-bold italic">{formatLargeMoney(m.mileage)}km에 교체</p>}
+              </div>
+              <div className="text-right">
+                <p className="font-black text-blue-600">{formatLargeMoney(m.cost)}원</p>
+                <button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-200 mt-1 active:scale-95"><Trash2 size={14}/></button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
-      <button onClick={() => setModalOpen(true)} className="fixed bottom-[110px] right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-[0_0_15px_rgba(30,41,59,0.5)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
+
+      <button onClick={() => setModalOpen(true)} className="fixed bottom-[110px] right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-lg flex items-center justify-center z-40 active:scale-95 transition-all"><Plus size={28}/></button>
       
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
