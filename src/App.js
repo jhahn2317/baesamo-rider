@@ -83,6 +83,7 @@ const getGroupMetrics = (items) => {
   return { durationStr: totalMins > 0 ? `${hours > 0 ? hours+'시간 ' : ''}${mins > 0 ? mins+'분' : ''}`.trim() : '-', totalCnt, totalAmt, perDelivery: totalCnt > 0 ? Math.round(totalAmt / totalCnt) : 0, hourlyRate: totalMins > 0 ? Math.round(totalAmt / (totalMins / 60)) : 0 };
 };
 
+// 💡 터치 드래그 닫기 함수 (현재 정보방/레이크원/정비 모달 등에만 사용)
 export const handleTouchStart = (e) => { e.currentTarget.dataset.startY = e.touches[0].clientY; e.currentTarget.style.transition = 'none'; };
 export const handleTouchMove = (e) => { const swipeDistance = e.touches[0].clientY - parseFloat(e.currentTarget.dataset.startY || 0); if (swipeDistance > 0) e.currentTarget.style.transform = `translateY(${swipeDistance}px)`; };
 export const handleTouchEnd = (e, closeFunction) => {
@@ -92,11 +93,15 @@ export const handleTouchEnd = (e, closeFunction) => {
   else { e.currentTarget.style.transform = 'translateY(0)'; setTimeout(() => { e.currentTarget.style.transform = ''; }, 300); }
 };
 
+
 // === [2. 서브 뷰: 정비 관리 (MaintenanceView)] ===
 
 function MaintenanceView({ user }) {
-  const [list, setAllList] = useState([]); const [modalOpen, setModalOpen] = useState(false); const [step, setStep] = useState(1);
+  const [list, setAllList] = useState([]); 
+  const [modalOpen, setModalOpen] = useState(false); 
+  const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
+  
   const [selectedFilter, setSelectedFilter] = useState('전체');
   const filters = ['전체', '오일', '패드', '타이어', '기타'];
   const items = ['엔진오일', '앞브레이크패드', '뒷브레이크패드', '벨트', '앞타이어', '뒷타이어', '배터리', '미션오일', '점화플러그'];
@@ -105,7 +110,9 @@ function MaintenanceView({ user }) {
     if (!user?.uid) return;
     const q = query(collection(db, 'maintenance'), where('userId', '==', user.uid));
     return onSnapshot(q, (s) => { 
-      const data = s.docs.map(d => ({ id: d.id, ...d.data() })); data.sort((a, b) => new Date(b.date) - new Date(a.date)); setAllList(data); 
+      const data = s.docs.map(d => ({ id: d.id, ...d.data() })); 
+      data.sort((a, b) => new Date(b.date) - new Date(a.date)); 
+      setAllList(data); 
     });
   }, [user.uid]);
 
@@ -137,9 +144,11 @@ function MaintenanceView({ user }) {
         <div><h3 className="text-[11px] font-black text-slate-400 mb-0.5 tracking-tight">총 정비 지출</h3><p className="text-2xl font-black text-slate-800 tracking-tighter leading-none">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p></div>
         <Wrench size={28} className="text-blue-100" />
       </div>
+
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
         {filters.map(f => (<button key={f} onClick={() => setSelectedFilter(f)} className={`px-3.5 py-1.5 rounded-full text-[11px] font-black shrink-0 transition-all shadow-sm ${selectedFilter === f ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>{f}</button>))}
       </div>
+
       <div className="space-y-2">
         {filteredList.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-[1.5rem] border border-dashed border-slate-200"><Wrench className="mx-auto text-slate-200 mb-2" size={32}/><p className="text-slate-400 font-bold text-xs">해당하는 정비 내역이 없습니다.</p></div>
@@ -147,15 +156,22 @@ function MaintenanceView({ user }) {
           filteredList.map(m => (
             <div key={m.id} className="bg-white px-4 py-3 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm active:scale-95 transition-transform">
               <div className="flex flex-col"><p className="text-[9px] font-bold text-slate-400 mb-0.5">{m.date}</p><p className="font-black text-slate-800 text-[13px] leading-none">{m.item}</p>{m.mileage > 0 && <p className="text-[9px] text-blue-500 font-bold italic mt-1">{formatLargeMoney(m.mileage)}km 교체</p>}</div>
-              <div className="flex flex-col items-end"><p className="font-black text-blue-600 text-[14px] leading-none">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1.5 active:scale-90 p-1 -mr-1"><Trash2 size={12}/></button></div>
+              <div className="flex flex-col items-end">
+                <p className="font-black text-blue-600 text-[14px] leading-none">{formatLargeMoney(m.cost)}원</p>
+                {/* 💡 삭제 팝업 적용 */}
+                <button onClick={() => { if(window.confirm('이 정비 기록을 정말 삭제하시겠습니까?')) deleteDoc(doc(db, 'maintenance', m.id)); }} className="text-slate-300 mt-1.5 active:scale-90 p-1 -mr-1"><Trash2 size={12}/></button>
+              </div>
             </div>
           ))
         )}
       </div>
+
       <button onClick={() => setModalOpen(true)} className="fixed bottom-[110px] right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-lg flex items-center justify-center z-40 active:scale-95 transition-all"><Plus size={28}/></button>
+      
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
-          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-10 animate-in slide-in-from-bottom duration-300 border-t-8 border-slate-800">
+          <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => {setModalOpen(false); setStep(1);})} className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-10 animate-in slide-in-from-bottom duration-300 border-t-8 border-slate-800">
+            <div className="w-14 h-1.5 bg-slate-300 rounded-full mx-auto mb-6 shrink-0"></div>
             <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black">정비 기록 ({step}/3)</h2><button onClick={() => {setModalOpen(false); setStep(1);}}><X size={20}/></button></div>
             {step === 1 && (<div className="grid grid-cols-2 gap-2"><div className="grid grid-cols-2 col-span-2 gap-2 max-h-[45vh] overflow-y-auto">{items.map(i => (<button key={i} onClick={() => { setFormData({...formData, item: i}); setStep(2); }} className="py-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm active:bg-slate-800 active:text-white">{i}</button>))}</div><button onClick={() => { const v = prompt('정비 항목 입력'); if(v) {setFormData({...formData, item: v}); setStep(2);}}} className="col-span-2 py-4 bg-white border-2 border-dashed border-slate-200 rounded-xl font-bold text-slate-400">직접입력</button></div>)}
             {step === 2 && (<div className="space-y-6 text-center py-4"><p className="font-black text-slate-500 text-lg">언제 정비하셨나요?</p><input type="date" value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})} className="w-full p-5 bg-slate-50 rounded-2xl text-center font-black text-2xl outline-none" /><button onClick={() => setStep(3)} className="w-full py-5 bg-slate-800 text-white rounded-2xl font-black text-lg shadow-lg">다음 단계</button></div>)}
@@ -176,7 +192,8 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
   
   const [category, setCategory] = useState('🚨단속'); const [place, setPlace] = useState('');
   const [quickStatus, setQuickStatus] = useState(''); const [details, setDetails] = useState('');
-  const [checkedTime, setCheckedTime] = useState(formatTimeStr(getKSTDate()).slice(0,5)); const [isUrgent, setIsUrgent] = useState(false);
+  const [checkedTime, setCheckedTime] = useState(formatTimeStr(getKSTDate()).slice(0,5)); 
+  const [isUrgent, setIsUrgent] = useState(true); // 기본값 True (단속)
 
   const categories = ['🚨단속', '💥사고', '⏳조리지연', '💬기타'];
   const quickOpts = { '🚨단속': ['경찰 단속 중', '캠코더 단속 중', '안전모/신호 단속', '함정 단속 조심'], '💥사고': ['오토바이/차량 사고', '차량 사고 정체', '도로 통제/공사 중', '우회 요망'], '⏳조리지연': ['10분 이상 지연', '20분 이상 지연', '30분 이상 지연', '콜 빼세요🚨'], '💬기타': [] };
@@ -188,7 +205,6 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
     return onSnapshot(q, (s) => setList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
 
-  // 💡 메인 뷰에서 팝업 트리거 전달받음
   useEffect(() => {
     if (openModalTrigger) { handleOpenModal(); resetModalTrigger(); }
   }, [openModalTrigger]);
@@ -204,11 +220,12 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
     return { type: 'UNKNOWN', label: '⚠️ B동 호수가 아니거나 확인되지 않습니다.' };
   };
 
-  const handleOpenModal = () => { setCategory('🚨단속'); setPlace(''); setQuickStatus(''); setDetails(''); setCheckedTime(formatTimeStr(getKSTDate()).slice(0,5)); setIsUrgent(false); setIsModalOpen(true); };
+  const handleOpenModal = () => { setCategory('🚨단속'); setPlace(''); setQuickStatus(''); setDetails(''); setCheckedTime(formatTimeStr(getKSTDate()).slice(0,5)); setIsUrgent(true); setIsModalOpen(true); };
   
   const handleSend = async () => {
     if (category !== '💬기타' && !place.trim()) return alert('위치/매장명을 입력하세요!');
     let finalMsg = category === '💬기타' ? (details || quickStatus) : category === '⏳조리지연' ? `[${place}] ${quickStatus}\n(🕒 확인시간: ${checkedTime})${details ? '\n💬 '+details : ''}` : `[${place}] ${quickStatus}${details ? '\n💬 '+details : ''}`;
+    
     await addDoc(collection(db, 'board'), { category, place, text: finalMsg.trim(), isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: serverTimestamp() });
     
     if (isUrgent) {
@@ -233,7 +250,11 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
           <div key={item.id} className={`p-4 rounded-2xl shadow-sm border transition-all ${item.isUrgent ? 'bg-rose-50 border-rose-200 ring-2 ring-rose-100' : 'bg-white border-slate-100'}`}>
             <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${item.isUrgent ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>{item.isUrgent && <Megaphone size={10}/>} {item.isUrgent ? '긴급공지' : item.category?.slice(0,1) + ' ' + item.nickname}</span><span className="text-[9px] font-bold text-slate-400">{item.createdAt?.toDate ? formatTimeStr(item.createdAt.toDate()).slice(0,5) : ''}</span></div>
             <p className={`text-[14px] font-bold leading-relaxed whitespace-pre-wrap ${item.isUrgent ? 'text-rose-700' : 'text-slate-700'}`}>{item.text}</p>
-            <div className="mt-3 flex gap-2"><button onClick={() => updateDoc(doc(db, 'board', item.id), { likes: (item.likes || 0) + 1 })} className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 flex items-center gap-1 active:scale-95"><ThumbsUp size={12}/> 확인완료 {item.likes > 0 && <span className="text-blue-500">{item.likes}</span>}</button>{item.userId === user.uid && <button onClick={() => deleteDoc(doc(db, 'board', item.id))} className="text-slate-300 ml-auto p-1 active:scale-90"><Trash2 size={14}/></button>}</div>
+            <div className="mt-3 flex gap-2">
+              <button onClick={() => updateDoc(doc(db, 'board', item.id), { likes: (item.likes || 0) + 1 })} className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 flex items-center gap-1 active:scale-95"><ThumbsUp size={12}/> 확인완료 {item.likes > 0 && <span className="text-blue-500">{item.likes}</span>}</button>
+              {/* 💡 삭제 팝업 적용 */}
+              {item.userId === user.uid && <button onClick={() => { if(window.confirm('이 제보를 정말 삭제하시겠습니까?')) deleteDoc(doc(db, 'board', item.id)); }} className="text-slate-300 ml-auto p-1 active:scale-90"><Trash2 size={14}/></button>}
+            </div>
           </div>
         ))}
       </div>
@@ -258,7 +279,10 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
             <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 shrink-0"></div>
             <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-black text-slate-900 flex items-center gap-1.5"><Megaphone size={18} className="text-blue-500"/> 현장 제보</h2><button onClick={() => setIsModalOpen(false)} className="bg-white text-slate-500 p-2 rounded-full"><X size={18}/></button></div>
             <div className="overflow-y-auto no-scrollbar space-y-4 pb-2">
-               <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">{categories.map(cat => (<button key={cat} type="button" onClick={() => {setCategory(cat); setQuickStatus(''); setPlace('');}} className={`px-3 py-2 rounded-xl text-[11px] font-black shrink-0 ${category === cat ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}>{cat}</button>))}</div>
+               <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  {/* 💡 단속 클릭 시 전광판 체크박스 자동 True 기능 */}
+                  {categories.map(cat => (<button key={cat} type="button" onClick={() => {setCategory(cat); setQuickStatus(''); setPlace(''); setIsUrgent(cat === '🚨단속'); }} className={`px-3 py-2 rounded-xl text-[11px] font-black shrink-0 ${category === cat ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}>{cat}</button>))}
+               </div>
                {category !== '💬기타' && (
                   <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 space-y-3">
                      <div><label className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1">{category === '⏳조리지연' ? <Store size={12}/> : <MapPin size={12}/>} {category === '⏳조리지연' ? '매장명' : '발생 위치'}</label><input type="text" value={place} onChange={e=>setPlace(e.target.value)} placeholder={category === '⏳조리지연' ? '예: 교촌치킨 동탄역점' : '예: 동탄역 사거리'} className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400" />
@@ -291,7 +315,7 @@ function StatusView({ allUsers }) {
   const active = allUsers.filter(u => u.isRiding && !u.isStealth);
   const stealthUsers = allUsers.filter(u => u.isRiding && u.isStealth);
   const inactiveNormal = allUsers.filter(u => !u.isRiding && !u.isStealth);
-  const inactive = [...inactiveNormal, ...stealthUsers];
+  const inactive = [...inactiveNormal, ...stealthUsers]; // 💡 스텔스는 철저하게 휴식중으로 위장
 
   return (
     <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
@@ -314,6 +338,7 @@ function StatusView({ allUsers }) {
       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 opacity-80 shadow-sm">
         <h2 className="text-xs font-black text-slate-400 mb-4 flex items-center justify-between">
           <span className="flex items-center gap-1.5"><Users size={16}/> 휴식 중</span>
+          {/* 💡 헤더에만 스텔스 존재 여부 알림 */}
           <span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px]">기본 {inactiveNormal.length}명 + 🥷스텔스 {stealthUsers.length}명</span>
         </h2>
         <div className="grid grid-cols-2 gap-2.5">
@@ -518,6 +543,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     setDeliveryFormData(form); setEditingDeliveryShift(shift); setSelectedShiftDetail(null); setIsDeliveryModalOpen(true); 
   };
 
+  // 💡 삭제 팝업 적용
   const deleteShift = async (shift) => {
     if(!window.confirm('이 시간대의 기록을 통째로 모두 삭제하시겠습니까?')) return;
     for(const item of shift.items) { await deleteDoc(doc(db, 'delivery', item.id)); }
@@ -526,6 +552,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
 
   const handleToggleMergeShift = (shiftId) => { setSelectedShiftsToMerge(prev => prev.includes(shiftId) ? prev.filter(id => id !== shiftId) : [...prev, shiftId]); };
 
+  // 💡 회차 통합 로직 복구 완료
   const executeShiftMerge = async (date) => {
       if (selectedShiftsToMerge.length < 2) { alert("통합할 회차를 2개 이상 선택해주세요!"); return; }
       if (!window.confirm(`선택한 ${selectedShiftsToMerge.length}개의 회차를 하나로 완벽하게 통합하시겠습니까?`)) return;
@@ -558,14 +585,23 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
 
   return (
     <div className="flex flex-col gap-2 pb-8 pt-1 animate-in fade-in duration-500 text-slate-800 px-5">
-      <style>{`@keyframes custom-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-custom-scroll { display: flex; width: max-content; animation: custom-scroll 12s linear infinite; }`}</style>
+      
+      {/* 💡 전광판의 끊김 없는 무한 롤링을 위한 CSS */}
+      <style>{`
+        @keyframes custom-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } 
+        .animate-custom-scroll { display: flex; width: max-content; animation: custom-scroll 12s linear infinite; }
+      `}</style>
       
       <div className="mt-2">
         {/* 💡 전광판 클릭 시 onNoticeClick 호출 ➔ 정보방 팝업 오픈 */}
         <div onClick={onNoticeClick} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 overflow-hidden ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}>
           <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}><AlertCircle size={18}/></div>
           <div className={`flex-1 min-w-0 font-black text-[13px] overflow-hidden ${displayNotice ? 'text-rose-600' : 'text-slate-400'}`}>
-            {displayNotice ? ( <div className="animate-custom-scroll gap-8 pt-0.5"><span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span></div> ) : ( <div className="truncate w-full pt-0.5">{defaultNotice}</div> )}
+            {displayNotice ? ( 
+               <div className="animate-custom-scroll gap-8 pt-0.5">
+                  <span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span>
+               </div> 
+            ) : ( <div className="truncate w-full pt-0.5">{defaultNotice}</div> )}
           </div>
           <Edit3 size={14} className="text-slate-300 shrink-0"/>
         </div>
@@ -706,7 +742,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       )}
 
-      {/* 리스트 영역 */}
       {deliverySubTab === 'calendar' && (() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -800,19 +835,38 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true); 
       }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
 
-      {/* 💡 완전히 원래 폼 디자인으로 복구된 배달 마감 모달 */}
+      {/* 💡 완전히 원래 폼 디자인으로 복구된 배달 마감 모달 (z-index 최상위, 터치 이벤트 삭제) */}
       {isDeliveryModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-[90] flex items-end justify-center p-0">
+        <div className="fixed inset-0 bg-black/60 z-[120] flex items-end justify-center p-0">
           <div className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[90vh] border-t-8 border-blue-500 mt-20 animate-in slide-in-from-bottom duration-300">
             <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 shrink-0"></div>
-            <div className="flex justify-between items-center mb-5 shrink-0"><h2 className="text-xl font-black text-slate-900 tracking-tight">{editingDeliveryShift ? '근무 기록 수정' : splitQueue.length > 0 ? '이전 시간 정산 기록' : '배달 최종 마감'}</h2><button onClick={handleCloseDeliveryModal} className="bg-white text-slate-500 p-2.5 rounded-full shadow-sm border border-slate-200 hover:bg-slate-50"><X size={18}/></button></div>
+            
+            <div className="flex justify-between items-center mb-5 shrink-0">
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                {editingDeliveryShift ? '근무 기록 수정' : splitQueue.length > 0 ? '이전 시간 정산 기록' : '배달 최종 마감'}
+              </h2>
+              <button onClick={handleCloseDeliveryModal} className="bg-white text-slate-500 p-2.5 rounded-full shadow-sm border border-slate-200 hover:bg-slate-50">
+                <X size={18}/>
+              </button>
+            </div>
+            
             <form onSubmit={handleDeliverySubmit} className="space-y-4 overflow-y-auto no-scrollbar pb-2">
               <div className="grid grid-cols-3 gap-2 pb-4 border-b border-slate-200 w-full">
-                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm"><label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><CalendarIcon size={10} className="text-blue-500"/>날짜</label><input type="date" value={deliveryFormData.date} onChange={e=>setDeliveryFormData({...deliveryFormData, date:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" /></div>
-                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm"><label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>시작</label><input type="time" step="1" value={deliveryFormData.startTime} onChange={e=>setDeliveryFormData({...deliveryFormData, startTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" /></div>
-                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm"><label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>종료</label><input type="time" step="1" value={deliveryFormData.endTime} onChange={e=>setDeliveryFormData({...deliveryFormData, endTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" /></div>
+                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
+                  <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><CalendarIcon size={10} className="text-blue-500"/>날짜</label>
+                  <input type="date" value={deliveryFormData.date} onChange={e=>setDeliveryFormData({...deliveryFormData, date:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
+                </div>
+                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
+                  <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>시작</label>
+                  <input type="time" step="1" value={deliveryFormData.startTime} onChange={e=>setDeliveryFormData({...deliveryFormData, startTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
+                </div>
+                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
+                  <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>종료</label>
+                  <input type="time" step="1" value={deliveryFormData.endTime} onChange={e=>setDeliveryFormData({...deliveryFormData, endTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
+                </div>
               </div>
 
+              {/* 🛵 배민 입력 폼 */}
               <div className="bg-white p-4 rounded-[1.2rem] shadow-sm border border-slate-200 mt-2">
                 <div className="font-black text-[#1f938f] text-[13px] mb-3 flex items-center gap-1.5"><Bike size={14}/> 배달의민족</div>
                 <div className="space-y-3">
@@ -824,6 +878,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                      </div>
                      <NetDiffInfo device="main" platform="배민" inputAmt={deliveryFormData.mainBaeminAmt} inputCnt={deliveryFormData.mainBaeminCnt} date={deliveryFormData.date} />
                   </div>
+
                   {deliveryFormData.useTwoPhones && (
                     <>
                       <div className="w-full border-t border-slate-100"></div>
@@ -840,6 +895,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 </div>
               </div>
               
+              {/* 🛵 쿠팡 입력 폼 */}
               <div className="bg-slate-900/5 p-4 rounded-[1.2rem] shadow-sm border border-slate-900/10">
                 <div className="font-black text-slate-700 text-[13px] mb-3 flex items-center gap-1.5"><Bike size={14}/> 쿠팡이츠</div>
                 <div className="space-y-3">
@@ -851,6 +907,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                      </div>
                      <NetDiffInfo device="main" platform="쿠팡" inputAmt={deliveryFormData.mainCoupangAmt} inputCnt={deliveryFormData.mainCoupangCnt} date={deliveryFormData.date} />
                   </div>
+
                   {deliveryFormData.useTwoPhones && (
                     <>
                       <div className="w-full border-t border-slate-200"></div>
@@ -880,21 +937,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
           </div>
         </div>
       )}
-
-      {selectedShiftDetail && (
-         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-[80] p-0">
-            <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl relative border-t-8 border-blue-600">
-               <div className="w-14 h-1.5 bg-slate-300 rounded-full mx-auto mb-6"></div>
-               <h3 className="text-xl font-black mb-4 flex items-center gap-1.5"><Bike size={22} className="text-blue-600"/> 근무 타임 상세</h3>
-               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3 mb-6">
-                 {selectedShiftDetail.items.map(item => (
-                   <div key={item.id} className="flex justify-between items-center"><div className="flex items-center gap-2"><span className="text-[10px] font-black px-2 py-1 rounded bg-slate-800 text-white">{item.platform}</span><span className="font-black">{userData.nickname}</span><span className="text-[11px] text-slate-500">({item.count}건)</span></div><div className="font-black">{formatLargeMoney(item.amount)}원</div></div>
-                 ))}
-               </div>
-               <div className="grid grid-cols-2 gap-3"><button onClick={() => deleteShift(selectedShiftDetail)} className="py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-sm flex items-center justify-center gap-1.5 shadow-sm active:scale-95"><Trash2 size={18}/> 삭제</button><button onClick={() => setSelectedShiftDetail(null)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button></div>
-            </div>
-         </div>
-      )}
     </div>
   );
 }
@@ -912,7 +954,6 @@ export default function App() {
   const [dailyDeliveries, setDailyDeliveries] = useState([]);
   const [globalNotice, setGlobalNotice] = useState(null);
   
-  // 💡 정보방 팝업 트리거 상태
   const [triggerInfoModal, setTriggerInfoModal] = useState(false);
   
   const todayStr = getKSTDateStr();
@@ -1010,7 +1051,6 @@ export default function App() {
              <DeliveryView 
                user={user} userData={userData} dailyDeliveries={dailyDeliveries} 
                selectedYear={selectedYear} selectedMonth={selectedMonth} globalNotice={globalNotice}
-               // 💡 메인 전광판 클릭 시 정보방으로 이동 + 팝업 트리거
                onNoticeClick={() => { setActiveTab('board'); setTriggerInfoModal(true); }} 
              />
           )}
