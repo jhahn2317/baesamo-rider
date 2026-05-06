@@ -3,10 +3,10 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 
-// 💡 아이콘 Import
+// 💡 필수 아이콘 Import (에러 났던 ChevronDownSquare 복구 완료!)
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
-  Trash2, Clock, ChevronDown, ChevronUp, 
+  Trash2, Clock, ChevronDown, ChevronUp, ChevronDownSquare,
   Target, Edit3, X, Timer, Coins, Filter, RefreshCw, 
   ChevronLeft, ChevronRight, Settings, Users, Ghost,
   CalendarCheck, AlertCircle, Share,
@@ -74,7 +74,7 @@ const getWeekOfMonth = (dateStr) => {
 };
 
 const formatLargeMoney = (v) => {
-  if (!v) return '0';
+  if (v === '' || v === undefined || v === null) return '0';
   const num = typeof v === 'string' ? parseFloat(v.replace(/,/g, '')) : v;
   return isNaN(num) ? '0' : new Intl.NumberFormat('ko-KR').format(num);
 };
@@ -203,8 +203,11 @@ function MaintenanceView({ user }) {
   const handleSave = async () => {
     if (!formData.item || !formData.cost) return alert("내용을 입력하세요.");
     await addDoc(collection(db, 'maintenance'), { 
-      ...formData, userId: user.uid, cost: parseInt(formData.cost.replace(/,/g, '')),
-      mileage: parseInt(formData.mileage.replace(/,/g, '') || 0), createdAt: serverTimestamp() 
+      ...formData, 
+      userId: user.uid, 
+      cost: parseInt(formData.cost.replace(/,/g, '')),
+      mileage: parseInt(formData.mileage.replace(/,/g, '') || 0),
+      createdAt: serverTimestamp() 
     });
     setModalOpen(false); setStep(1); setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
   };
@@ -223,7 +226,7 @@ function MaintenanceView({ user }) {
           </div>
         ))}
       </div>
-      <button onClick={() => setModalOpen(true)} className="fixed bottom-28 right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-[0_0_15px_rgba(30,41,59,0.5)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
+      <button onClick={() => setModalOpen(true)} className="fixed bottom-24 right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-[0_0_15px_rgba(30,41,59,0.5)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
       
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
@@ -330,7 +333,7 @@ function InfoBoardView({ user, userData }) {
           <div key={item.id} className={`p-4 rounded-2xl shadow-sm border transition-all ${item.isUrgent ? 'bg-rose-50 border-rose-200 ring-2 ring-rose-100' : 'bg-white border-slate-100'}`}>
             <div className="flex justify-between items-start mb-2">
               <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${item.isUrgent ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                {item.isUrgent && <Megaphone size={10}/>} {item.isUrgent ? '중요 공지' : item.category.slice(0,1) + ' ' + item.nickname}
+                {item.isUrgent && <Megaphone size={10}/>} {item.isUrgent ? '중요 공지' : item.category?.slice(0,1) + ' ' + item.nickname}
               </span>
               <span className="text-[9px] font-bold text-slate-400">{item.createdAt?.toDate ? formatTimeStr(item.createdAt.toDate()).slice(0,5) : ''}</span>
             </div>
@@ -414,7 +417,7 @@ function InfoBoardView({ user, userData }) {
                   )}
                </div>
 
-               <button onClick={handleSend} disabled={!quickStatus && !details && !place} className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-base active:scale-95 shadow-lg transition-transform disabled:opacity-50">제보 완료하기 🚀</button>
+               <button onClick={handleSend} disabled={category !== '💬기타' && !place.trim()} className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-base active:scale-95 shadow-lg transition-transform disabled:opacity-50">제보 완료하기 🚀</button>
             </div>
           </div>
         </div>
