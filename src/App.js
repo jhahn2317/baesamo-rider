@@ -1580,6 +1580,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
+  const [pendingUsers, setPendingUsers] = useState([]); // 💡 가입 대기 유저 상태 추가
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
   const [activeTab, setActiveTab] = useState('delivery');
@@ -1615,11 +1616,26 @@ export default function App() {
         setUser(null);
         setUserData(null);
         setAllUsers([]);
+        setPendingUsers([]);
         setLoading(false);
       }
     });
     return () => unsub();
   }, []);
+
+  // 💡 관리자용 가입 대기열 감시 (isAdmin이 true일 때만 작동)
+  useEffect(() => {
+    if (userData?.isAdmin) {
+      const pendingQuery = query(collection(db, 'users'), where('status', '==', 'pending'));
+      const unsubPending = onSnapshot(pendingQuery, (s) => {
+         const pUsers = s.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+         setPendingUsers(pUsers);
+      });
+      return () => unsubPending();
+    } else {
+      setPendingUsers([]);
+    }
+  }, [userData?.isAdmin]);
 
   const handleRegister = async (data) => {
     try {
@@ -1630,6 +1646,19 @@ export default function App() {
     } catch (err) {
       alert(`[가입에러] 내용: ${err.message}`);
     }
+  };
+
+  // 💡 관리자용 승인/거절 액션 함수
+  const handleApproveUser = async (targetUid) => {
+    if (!window.confirm('이 사용자의 가입을 승인하시겠습니까?')) return;
+    await updateDoc(doc(db, 'users', targetUid), { status: 'approved' });
+    alert('승인되었습니다! 이제 해당 멤버가 앱을 사용할 수 있습니다.');
+  };
+
+  const handleRejectUser = async (targetUid) => {
+    if (!window.confirm('가입을 거절하고 이 데이터를 삭제하시겠습니까?')) return;
+    await deleteDoc(doc(db, 'users', targetUid));
+    alert('가입이 거절(삭제) 되었습니다.');
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center font-black text-blue-500 text-2xl bg-blue-50">🛵 로딩 중...</div>;
@@ -1664,7 +1693,7 @@ export default function App() {
         </div>
         <div className="bg-blue-50 px-3 py-1.5 rounded-full text-xs font-black text-blue-600 border border-blue-100 shadow-sm flex items-center gap-1.5">
           {userData.isRiding && !userData.isStealth && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></span>}
-          {userData.nickname} 님
+          {userData.isAdmin ? '👑' : ''} {userData.nickname} 님
         </div>
       </header>
 
@@ -1679,18 +1708,53 @@ export default function App() {
         )}
 
         {activeTab === 'settings' && (
-          <div className="px-5 pt-6 animate-in fade-in slide-in-from-right-4">
+          <div className="px-5 pt-6 animate-in fade-in slide-in-from-right-4 space-y-4 pb-10">
+            {/* 기본 내 정보 카드 */}
             <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100 text-center space-y-6">
               <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner border border-blue-100">🛵</div>
               <div>
                 <h2 className="text-2xl font-black text-gray-800">{userData.nickname}</h2>
                 <p className="text-sm font-bold text-gray-400 mt-1">{userData.name} · {userData.bikeNumber}</p>
-                <div className="mt-4 inline-block bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-black border border-green-200">
-                  승인된 정식 멤버
+                <div className="mt-4 inline-flex items-center gap-1 bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-black border border-green-200">
+                  {userData.isAdmin ? '👑 방장 (관리자)' : '승인된 정식 멤버'}
                 </div>
               </div>
               <button onClick={() => signOut(auth)} className="w-full bg-gray-50 text-gray-500 py-4 rounded-2xl font-black border border-gray-200 active:scale-95 transition-transform hover:bg-gray-100">안전하게 로그아웃</button>
             </div>
+
+            {/* 💡 관리자 전용: 가입 승인 대기열 */}
+            {userData?.isAdmin && (
+              <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-blue-200 animate-in slide-in-from-bottom-4">
+                 <h3 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">👑 가입 승인 대기열</span>
+                    <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[10px]">{pendingUsers.length}명 대기중</span>
+                 </h3>
+
+                 <div className="space-y-3">
+                    {pendingUsers.length === 0 ? (
+                      <div className="text-center py-6 text-gray-400 font-bold text-xs bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                        가입 승인을 대기 중인 멤버가 없습니다.
+                      </div>
+                    ) : (
+                      pendingUsers.map(pUser => (
+                        <div key={pUser.uid} className="flex flex-col gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-200 shadow-sm">
+                           <div className="flex justify-between items-start">
+                              <div>
+                                <div className="font-black text-gray-800 text-base">{pUser.nickname} <span className="text-xs font-bold text-gray-500">({pUser.name})</span></div>
+                                <div className="text-[11px] font-bold text-gray-500 mt-1">오토바이: {pUser.bikeNumber}</div>
+                                <div className="text-[11px] font-bold text-gray-500">출생년도: {pUser.birthYear}년생 ({pUser.age}세)</div>
+                              </div>
+                           </div>
+                           <div className="flex gap-2 mt-1">
+                              <button onClick={() => handleApproveUser(pUser.uid)} className="flex-[2] bg-blue-600 text-white py-2.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">승인하기</button>
+                              <button onClick={() => handleRejectUser(pUser.uid)} className="flex-1 bg-white text-rose-500 border border-rose-200 py-2.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">거절/삭제</button>
+                           </div>
+                        </div>
+                      ))
+                    )}
+                 </div>
+              </div>
+            )}
           </div>
         )}
       </main>
