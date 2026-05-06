@@ -3,7 +3,6 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 
-// 💡 아이콘 Import
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
   Trash2, Clock, ChevronDown, ChevronUp, ChevronDownSquare,
@@ -183,9 +182,8 @@ export const handleTouchEnd = (e, closeFunction) => {
 };
 
 // ==========================================
-// 3. 서브 뷰 (정비, 실시간 게시판, 현황)
+// 3. 서브 뷰
 // ==========================================
-
 function MaintenanceView({ user }) {
   const [list, setAllList] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -202,7 +200,6 @@ function MaintenanceView({ user }) {
     if (!formData.item || !formData.cost) return alert("정비 항목과 비용을 모두 입력해주세요!");
     
     try {
-      // 💡 안전한 숫자 변환 및 에러 방지 처리
       await addDoc(collection(db, 'maintenance'), { 
         item: formData.item,
         date: formData.date,
@@ -211,13 +208,12 @@ function MaintenanceView({ user }) {
         userId: user.uid, 
         createdAt: serverTimestamp() 
       });
-      
       setModalOpen(false); 
       setStep(1); 
       setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
     } catch (error) {
       console.error("저장 에러:", error);
-      alert(`[저장 실패] 오류가 발생했습니다.\n내용: ${error.message}`);
+      alert(`[저장 실패] 파이어베이스 규칙을 확인하세요!\n내용: ${error.message}`);
     }
   };
 
@@ -232,7 +228,7 @@ function MaintenanceView({ user }) {
         {list.map(m => (
           <div key={m.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
             <div><p className="text-xs font-bold text-slate-400">{m.date}</p><p className="font-black text-slate-800">{m.item}</p>{m.mileage > 0 && <p className="text-[10px] text-blue-500 font-bold">{formatLargeMoney(m.mileage)}km에 교체</p>}</div>
-            <div className="text-right"><p className="font-black text-slate-700">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1 active:scale-90"><Trash2 size={14}/></button></div>
+            <div className="text-right"><p className="font-black text-slate-700">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1"><Trash2 size={14}/></button></div>
           </div>
         ))}
       </div>
@@ -447,8 +443,6 @@ function StatusView({ allUsers }) {
   );
 }
 
-
-
 // ==========================================
 // 4. 로그인 및 회원가입 화면
 // ==========================================
@@ -571,7 +565,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingDeliveryShift, setEditingDeliveryShift] = useState(null);
   
-  // 💡 탭 자동 스크롤을 위한 참조
   const tabRef = useRef(null);
 
   const emptyForm = { 
@@ -625,7 +618,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     await updateDoc(doc(db, 'users', user.uid), { isStealth: !userData.isStealth });
   };
 
-  // 💡 탭 클릭 시 스크롤 이동 로직
   const handleSubTabClick = (tabName) => {
     setDeliverySubTab(tabName);
     setTimeout(() => {
