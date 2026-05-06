@@ -3,7 +3,6 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc } from 'firebase/firestore';
 
-// 💡 필수 아이콘 Import (Vercel 에러 방지)
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
   Trash2, Clock, ChevronDown, ChevronUp, 
@@ -47,7 +46,7 @@ const getKSTDateStrFromDate = (dObj) => {
 
 const formatTimeStr = (dateObj) => {
   if (!dateObj || isNaN(dateObj.getTime())) return '';
-  return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+  return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`;
 };
 
 const getPaydayStr = (dateString) => {
@@ -89,8 +88,10 @@ const calcDailyMetrics = (deliveries) => {
   let intervals = [];
   deliveries.forEach(d => {
     if(d.startTime && d.endTime && typeof d.startTime === 'string' && typeof d.endTime === 'string') {
-      let [sh, sm] = d.startTime.split(':').map(Number);
-      let [eh, em] = d.endTime.split(':').map(Number);
+      let startParts = d.startTime.split(':').map(Number);
+      let endParts = d.endTime.split(':').map(Number);
+      let sh = startParts[0] || 0, sm = startParts[1] || 0;
+      let eh = endParts[0] || 0, em = endParts[1] || 0;
       if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
         let start = sh * 60 + sm;
         let end = eh * 60 + em;
@@ -128,7 +129,10 @@ const getGroupMetrics = (items) => {
     let intervals = [];
     dayItems.forEach(d => {
       if(d.startTime && d.endTime && typeof d.startTime === 'string' && typeof d.endTime === 'string') {
-        let [sh, sm] = d.startTime.split(':').map(Number); let [eh, em] = d.endTime.split(':').map(Number);
+        let startParts = d.startTime.split(':').map(Number);
+        let endParts = d.endTime.split(':').map(Number);
+        let sh = startParts[0] || 0, sm = startParts[1] || 0;
+        let eh = endParts[0] || 0, em = endParts[1] || 0;
         let start = sh * 60 + sm; let end = eh * 60 + em;
         if (end <= start) end += 1440; 
         intervals.push({start, end});
@@ -324,7 +328,7 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
 }
 
 // ==========================================
-// 4. 배달 수익 관리 메인 뷰 (투폰 기능 + 목표 게이지 복원)
+// 4. 배달 수익 관리 메인 뷰
 // ==========================================
 function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth }) {
   const todayStr = getKSTDateStr();
@@ -624,14 +628,14 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       let allItems = [];
       shifts.forEach(s => allItems.push(...s.items));
       
-      let minStart = "23:59";
-      let maxEnd = "00:00";
+      let minStart = "23:59:59";
+      let maxEnd = "00:00:00";
       allItems.forEach(item => {
           if (item.startTime && item.startTime < minStart) minStart = item.startTime;
           if (item.endTime && item.endTime > maxEnd) maxEnd = item.endTime;
       });
-      if (minStart === "23:59") minStart = "";
-      if (maxEnd === "00:00") maxEnd = "";
+      if (minStart === "23:59:59") minStart = "";
+      if (maxEnd === "00:00:00") maxEnd = "";
 
       const aggregated = {};
       allItems.forEach(item => {
@@ -721,19 +725,19 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       )}
 
       {/* 프리미엄 타이머 카드 */}
-      <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-2 ${timerActive ? (userData.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
+      <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-2 ${timerActive ? (userData?.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-3 ml-1">
             <div className={`p-3 rounded-2xl ${timerActive ? 'bg-white/20 text-white animate-pulse shadow-inner' : 'bg-slate-700 text-slate-300 shadow-inner'}`}>
-               {userData.isStealth ? <Ghost size={24} /> : <Timer size={24} />}
+               {userData?.isStealth ? <Ghost size={24} /> : <Timer size={24} />}
             </div>
             <div>
               <div className={`text-[11px] font-black flex items-center mb-0.5 ${timerActive ? 'text-blue-100' : 'text-slate-200'}`}>
-                {userData.isStealth ? 'Stealth Mode On' : 'Live Tracking'}
-                {timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 ${userData.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}
+                {userData?.isStealth ? 'Stealth Mode On' : 'Live Tracking'}
+                {timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 ${userData?.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}
                 {userData?.trackingStartTime && timerActive && (
                    <span className="ml-2 text-[10px] text-blue-100 font-bold bg-white/10 px-1.5 py-0.5 rounded shadow-sm border border-blue-300/30 tracking-tighter">
-                       {new Date(userData.trackingStartTime).getHours().toString().padStart(2,'0')}:{new Date(userData.trackingStartTime).getMinutes().toString().padStart(2,'0')} 시작
+                       {formatTimeStr(new Date(userData.trackingStartTime))} 시작
                    </span>
                 )}
               </div>
@@ -756,9 +760,9 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                  }
                  const startDateStr = getKSTDateStr();
                  
+                 setEditingDeliveryShift(null);
                  setDeliveryFormData({ ...emptyForm, date: startDateStr, startTime: startStr, endTime: timeNow });
                  setSplitQueue([]);
-                 setEditingDeliveryShift(null); 
                  setIsDeliveryModalOpen(true);
                } else {
                  handleStartDelivery();
@@ -768,8 +772,8 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
              </button>
              {/* 스텔스 토글 버튼 */}
              {timerActive && (
-               <button onClick={toggleStealth} className={`text-[10px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
-                  <Ghost size={12}/> {userData.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
+               <button onClick={toggleStealth} className={`text-[10px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData?.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
+                  <Ghost size={12}/> {userData?.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
                </button>
              )}
           </div>
@@ -838,13 +842,13 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
             const pct = goal > 0 ? Math.min(100, (deliveryFilteredTotal / goal) * 100) : 0;
             const todayObj = new Date();
             let remainingDays = 0;
-            if (calYear === todayObj.getFullYear() && calMonth === (todayObj.getMonth() + 1)) {
-                const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+            if (selectedYear === todayObj.getFullYear() && selectedMonth === (todayObj.getMonth() + 1)) {
+                const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
                 remainingDays = daysInMonth - todayObj.getDate();
-            } else if (todayObj.getFullYear() < calYear || (todayObj.getFullYear() === calYear && (todayObj.getMonth() + 1) < calMonth)) {
-                remainingDays = new Date(calYear, calMonth, 0).getDate();
+            } else if (todayObj.getFullYear() < selectedYear || (todayObj.getFullYear() === selectedYear && (todayObj.getMonth() + 1) < selectedMonth)) {
+                remainingDays = new Date(selectedYear, selectedMonth, 0).getDate();
             }
-            const timeRatio = remainingDays > 0 ? ((new Date(calYear, calMonth, 0).getDate() - remainingDays) / new Date(calYear, calMonth, 0).getDate()) * 100 : 100;
+            const timeRatio = remainingDays > 0 ? ((new Date(selectedYear, selectedMonth, 0).getDate() - remainingDays) / new Date(selectedYear, selectedMonth, 0).getDate()) * 100 : 100;
             const diff = pct - timeRatio;
             const remainingAmt = Math.max(0, goal - deliveryFilteredTotal);
             const dailyReq = remainingDays > 0 ? Math.ceil(remainingAmt / remainingDays) : 0;
@@ -957,7 +961,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         );
       })()}
 
-      {/* 필터 및 하위 탭바 */}
       <div className="flex items-center gap-2 mt-2">
         <div className="flex bg-white p-1 rounded-2xl flex-1 shadow-sm border border-slate-200">
           <button onClick={() => setDeliverySubTab('daily')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='daily'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>상세내역</button>
@@ -980,8 +983,8 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
 
       {/* 리스트 뷰 영역 (daily, calendar, weekly) */}
       {deliverySubTab === 'calendar' && (() => {
-        const firstDay = new Date(calYear, calMonth - 1, 1).getDay();
-        const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+        const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
+        const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
         const days = Array(firstDay).fill(null).concat(Array.from({length:daysInMonth}, (_,i)=>i+1));
         const dataByDate = {};
         (dailyDeliveries || []).forEach(d => { 
@@ -996,7 +999,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
              <div className="grid grid-cols-7 gap-1">
                {days.map((d, i) => {
                  if(!d) return <div key={`empty-${i}`} className="h-[65px] bg-slate-50 rounded-xl border border-slate-100"></div>;
-                 const dateStr = `${calYear}-${String(calMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                 const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                  const dayData = dataByDate[dateStr] || { amt: 0 };
                  const isToday = dateStr === todayStr;
                  const dayIndex = (i % 7);
@@ -1116,8 +1119,10 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                         let shiftHourlyRate = 0;
                         
                         if (shift.startTime && shift.endTime) {
-                            let [sh, sm] = shift.startTime.split(':').map(Number);
-                            let [eh, em] = shift.endTime.split(':').map(Number);
+                            let startParts = shift.startTime.split(':').map(Number);
+                            let endParts = shift.endTime.split(':').map(Number);
+                            let sh = startParts[0] || 0, sm = startParts[1] || 0;
+                            let eh = endParts[0] || 0, em = endParts[1] || 0;
                             let startMins = sh * 60 + sm;
                             let endMins = eh * 60 + em;
                             if (endMins <= startMins) endMins += 1440;
@@ -1224,8 +1229,10 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                       let durationStr = '-';
                       let hourlyRate = 0;
                       if (shiftStart && shiftEnd) {
-                          let [sh, sm] = shiftStart.split(':').map(Number);
-                          let [eh, em] = shiftEnd.split(':').map(Number);
+                          let startParts = shiftStart.split(':').map(Number);
+                          let endParts = shiftEnd.split(':').map(Number);
+                          let sh = startParts[0] || 0, sm = startParts[1] || 0;
+                          let eh = endParts[0] || 0, em = endParts[1] || 0;
                           let startMins = sh * 60 + sm;
                           let endMins = eh * 60 + em;
                           if (endMins <= startMins) endMins += 1440;
@@ -1423,11 +1430,11 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 </div>
                 <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
                   <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>시작</label>
-                  <input type="time" value={deliveryFormData.startTime} onChange={e=>setDeliveryFormData({...deliveryFormData, startTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
+                  <input type="time" step="1" value={deliveryFormData.startTime} onChange={e=>setDeliveryFormData({...deliveryFormData, startTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
                 </div>
                 <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
                   <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>종료</label>
-                  <input type="time" value={deliveryFormData.endTime} onChange={e=>setDeliveryFormData({...deliveryFormData, endTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
+                  <input type="time" step="1" value={deliveryFormData.endTime} onChange={e=>setDeliveryFormData({...deliveryFormData, endTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
                 </div>
               </div>
 
@@ -1684,7 +1691,7 @@ export default function App() {
   const [dailyDeliveries, setDailyDeliveries] = useState([]);
   const [globalNotice, setGlobalNotice] = useState(null);
 
-  // 헤더에 종속될 월/연도 상태 (App으로 상향)
+  // 헤더에 종속될 월/연도 상태
   const todayStr = getKSTDateStr();
   const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
   const [selectedMonth, setSelectedMonth] = useState(parseInt(todayStr.slice(5, 7)));
