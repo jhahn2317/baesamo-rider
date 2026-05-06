@@ -1,0 +1,16 @@
+{
+  "short_name": "배사모 Pro",
+  "name": "배고픈 사람들의 모임 RIDER PRO",
+  "icons": [
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "background_color": "#eff6ff"
+}
