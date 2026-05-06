@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 
+// 💡 아이콘 Import
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
   Trash2, Clock, ChevronDown, ChevronUp, ChevronDownSquare,
@@ -182,8 +183,9 @@ export const handleTouchEnd = (e, closeFunction) => {
 };
 
 // ==========================================
-// 3. 서브 뷰
+// 3. 서브 뷰 (정비, 실시간 게시판, 현황)
 // ==========================================
+
 function MaintenanceView({ user }) {
   const [list, setAllList] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -206,7 +208,7 @@ function MaintenanceView({ user }) {
   };
 
   return (
-    <div className="p-5 space-y-4 animate-in fade-in duration-500">
+    <div className="p-5 space-y-4 animate-in fade-in duration-500 pb-28">
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
         <div><h3 className="text-sm font-black text-slate-400 mb-1">총 정비 지출</h3><p className="text-2xl font-black text-slate-800">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p></div>
         <Wrench size={32} className="text-blue-100" />
@@ -219,7 +221,6 @@ function MaintenanceView({ user }) {
           </div>
         ))}
       </div>
-      {/* 💡 버튼 하단 메뉴와 안 겹치게 상향 조정 */}
       <button onClick={() => setModalOpen(true)} className="fixed bottom-[110px] right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-[0_0_15px_rgba(30,41,59,0.5)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
       
       {modalOpen && (
@@ -260,6 +261,7 @@ function MaintenanceView({ user }) {
 function InfoBoardView({ user, userData }) {
   const [list, setList] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
   const [category, setCategory] = useState('🚨단속/사고');
   const [place, setPlace] = useState('');
   const [quickStatus, setQuickStatus] = useState('');
@@ -308,7 +310,7 @@ function InfoBoardView({ user, userData }) {
   const sortedList = [...list].sort((a,b) => (b.isUrgent ? 1 : 0) - (a.isUrgent ? 1 : 0));
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500">
+    <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500 pb-28">
       <div className="p-5 space-y-3">
         {sortedList.length === 0 && <div className="py-20 text-center text-slate-400 font-bold text-sm bg-white rounded-2xl border border-dashed border-slate-200">새벽 6시 이후 등록된 실시간 정보가 없습니다.</div>}
         {sortedList.map(item => (
@@ -328,7 +330,6 @@ function InfoBoardView({ user, userData }) {
         ))}
       </div>
       
-      {/* 💡 버튼 하단 메뉴와 안 겹치게 상향 조정 */}
       <button onClick={handleOpenModal} className="fixed bottom-[110px] right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Edit3 size={24}/></button>
 
       {isModalOpen && (
@@ -396,7 +397,7 @@ function StatusView({ allUsers }) {
   const active = allUsers.filter(u => u.isRiding && !u.isStealth);
   const inactive = allUsers.filter(u => !u.isRiding || u.isStealth);
   return (
-    <div className="p-5 space-y-6">
+    <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
       <div className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm">
         <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
            <span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중</span>
@@ -553,6 +554,9 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingDeliveryShift, setEditingDeliveryShift] = useState(null);
   
+  // 💡 탭 자동 스크롤을 위한 참조
+  const tabRef = useRef(null);
+
   const emptyForm = { 
     date: getWorkDateStr(), startTime: '', endTime: '', 
     useTwoPhones: false,
@@ -602,6 +606,16 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   
   const toggleStealth = async () => {
     await updateDoc(doc(db, 'users', user.uid), { isStealth: !userData.isStealth });
+  };
+
+  // 💡 탭 클릭 시 스크롤 이동 로직
+  const handleSubTabClick = (tabName) => {
+    setDeliverySubTab(tabName);
+    setTimeout(() => {
+      if (tabRef.current) {
+        tabRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const getTodaySaved = (device, platform, targetDate) => {
@@ -913,7 +927,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          </div>
       )}
 
-      {/* 💡 상단 프리미엄 타이머 카드 (UI 깨짐 방지 - whitespace-nowrap, shrink-0 적용) */}
+      {/* 💡 상단 프리미엄 타이머 카드 */}
       <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-2 ${timerActive ? (userData?.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
         <div className="flex justify-between items-center">
           
@@ -961,7 +975,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                {timerActive ? '마감하기' : '배달 시작'}
              </button>
              
-             {/* 스텔스 토글 버튼 */}
              {timerActive && (
                <button onClick={toggleStealth} className={`whitespace-nowrap shrink-0 text-[9px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData?.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
                   <Ghost size={12}/> {userData?.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
@@ -1152,11 +1165,12 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         );
       })()}
 
-      <div className="flex items-center gap-2 mt-2">
+      {/* 💡 탭바 클릭 시 자동 스크롤을 위한 참조(ref) 추가 */}
+      <div ref={tabRef} className="flex items-center gap-2 mt-2">
         <div className="flex bg-white p-1 rounded-2xl flex-1 shadow-sm border border-slate-200">
-          <button onClick={() => setDeliverySubTab('daily')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='daily'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>상세내역</button>
-          <button onClick={() => setDeliverySubTab('calendar')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='calendar'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>달력</button>
-          <button onClick={() => setDeliverySubTab('weekly')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='weekly'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>주차별</button>
+          <button onClick={() => handleSubTabClick('daily')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='daily'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>상세내역</button>
+          <button onClick={() => handleSubTabClick('calendar')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='calendar'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>달력</button>
+          <button onClick={() => handleSubTabClick('weekly')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='weekly'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>주차별</button>
         </div>
         <button onClick={() => setShowDeliveryFilters(!showDeliveryFilters)} className={`p-3.5 rounded-2xl transition-colors shadow-sm border ${showDeliveryFilters ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}><Filter size={20} /></button>
       </div>
@@ -1775,122 +1789,4 @@ export default function App() {
   );
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-slate-50 overflow-hidden font-sans select-none">
-      
-      {/* 💡 [1. 고정 헤더 영역] : 위쪽 빈 공간 다이어트(pt-8) 완료 */}
-      <div className="bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 z-40 shrink-0">
-        <header className="px-5 pt-8 pb-3 flex justify-between items-center" style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}>
-          <div>
-            <span className="text-[10px] font-black text-blue-500 block mb-0.5 uppercase tracking-widest italic">Delivery Pro</span>
-            <h1 className="text-xl font-black">BAESAMO PRO</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-slate-100 rounded-full px-3 py-1.5 text-[13px] font-black text-slate-700 shadow-inner">
-               <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-slate-200 rounded-full"><ChevronLeft size={14}/></button>
-               <span className="mx-2">{selectedYear}</span>
-               <button onClick={() => setSelectedYear(selectedYear + 1)} className="p-1 hover:bg-slate-200 rounded-full"><ChevronRight size={14}/></button>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex overflow-x-auto no-scrollbar gap-2 px-5 pb-3">
-          {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-            <button key={m} onClick={() => setSelectedMonth(m)} className={`flex-none px-4 py-1.5 rounded-full font-black text-[13px] transition-all border ${selectedMonth === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}>{m}월</button>
-          ))}
-        </div>
-      </div>
-
-      {/* 💡 [2. 스크롤 본문 영역] : 밑에 메뉴바 뒤로 안 숨게 pb-[120px] 투명 쿠션 추가 */}
-      <div className="flex-1 overflow-y-auto no-scrollbar relative pb-[120px]">
-        {/* 공지사항 배너 (정보방에서는 제외) */}
-        {(displayNotice || activeTab === 'delivery') && activeTab !== 'board' && (
-          <div className="px-5 pt-4">
-            <div onClick={async () => {
-                const txt = prompt("긴급 공지를 입력하세요 (새벽 6시 초기화)", displayNotice);
-                if(txt !== null) await setDoc(doc(db, 'settings', 'globalNotice'), { text: txt.trim(), date: getWorkDateStr() });
-            }} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}>
-              <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}><AlertCircle size={18}/></div>
-              <div className={`flex-1 min-w-0 font-black text-[12px] truncate ${displayNotice ? 'text-rose-600' : 'text-slate-400'}`}>{displayNotice || '+ 실시간 긴급 공지/단속 정보 등록'}</div>
-              <Edit3 size={14} className="text-slate-300 shrink-0"/>
-            </div>
-          </div>
-        )}
-
-        <main className="max-w-md mx-auto min-h-full">
-          {activeTab === 'delivery' && (
-            <DeliveryView user={user} userData={userData} dailyDeliveries={dailyDeliveries} selectedYear={selectedYear} selectedMonth={selectedMonth} />
-          )}
-          {activeTab === 'board' && <InfoBoardView user={user} userData={userData} />}
-          {activeTab === 'maintenance' && <MaintenanceView user={user} userData={userData} />}
-          {activeTab === 'status' && <StatusView allUsers={allUsers} />}
-          {activeTab === 'settings' && (
-            <div className="p-5 space-y-6 animate-in fade-in duration-500">
-              <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 text-center space-y-4">
-                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner">🛵</div>
-                <h2 className="text-2xl font-black text-slate-800">{userData.nickname}</h2>
-                <div className="bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-black inline-block border border-green-200">{isAdmin ? '👑 방장 (관리자)' : '정식 멤버'}</div>
-                <button onClick={() => signOut(auth)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-black border border-slate-200 active:bg-slate-100">로그아웃</button>
-              </div>
-
-              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-                <h3 className="text-sm font-black text-blue-600 mb-3 flex items-center gap-1.5"><Target size={16}/> {selectedMonth}월 목표 설정</h3>
-                <p className="text-xs font-bold text-slate-500 mb-4">이번 달 배달 수익 목표를 설정하고 달성률 바를 확인하세요!</p>
-                <button onClick={async () => {
-                  const val = prompt("목표 금액(숫자만)");
-                  if(val) {
-                    const g = { ...(userData.deliveryGoals || {}), [`${selectedYear}-${String(selectedMonth).padStart(2,'0')}`]: parseInt(val.replace(/[^0-9]/g,'')) };
-                    await updateDoc(doc(db, 'users', user.uid), { deliveryGoals: g });
-                  }
-                }} className="w-full py-4 bg-blue-50 text-blue-600 rounded-2xl font-black text-sm border border-blue-100 active:scale-95 transition-transform shadow-sm">🎯 금액 설정하기</button>
-              </div>
-
-              {isAdmin && (
-                <div className={`bg-white p-6 rounded-[2rem] border ${pendingUsers.length > 0 ? 'border-rose-200 shadow-sm' : 'border-slate-100'}`}>
-                  <h3 className={`text-sm font-black mb-4 flex items-center gap-1.5 ${pendingUsers.length > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                    <Users size={16}/> 승인 대기열 ({pendingUsers.length})
-                  </h3>
-                  <div className="space-y-3">
-                    {pendingUsers.length === 0 ? (
-                        <div className="text-center py-6 text-slate-400 font-bold text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">가입 승인을 대기 중인 멤버가 없습니다.</div>
-                    ) : (
-                        pendingUsers.map(p => (
-                          <div key={p.uid} className="p-4 bg-rose-50 rounded-2xl flex justify-between items-center shadow-sm">
-                            <span className="font-black text-slate-800">{p.nickname}</span>
-                            <div className="flex gap-2">
-                              <button onClick={() => updateDoc(doc(db, 'users', p.uid), { status: 'approved' })} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95">승인</button>
-                              <button onClick={() => deleteDoc(doc(db, 'users', p.uid))} className="bg-white text-rose-500 border border-rose-200 px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95">거절</button>
-                            </div>
-                          </div>
-                        ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* --- [3. 고정 하단 탭바] --- */}
-      <div className="fixed bottom-6 left-0 right-0 pointer-events-none z-50">
-        <nav className="mx-auto max-w-sm pointer-events-auto h-[72px] bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full border border-slate-200/60 flex justify-around items-center px-4">
-          <button onClick={() => setActiveTab('delivery')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'delivery' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-            <Target size={24} className="mb-1" /><span className="text-[10px] font-black">수익</span>
-          </button>
-          <button onClick={() => setActiveTab('board')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'board' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-            <MessageSquare size={24} className="mb-1" /><span className="text-[10px] font-black">정보방</span>
-          </button>
-          <button onClick={() => setActiveTab('status')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'status' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-            <Users size={24} className="mb-1" /><span className="text-[10px] font-black">현황</span>
-          </button>
-          <button onClick={() => setActiveTab('maintenance')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'maintenance' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-            <Wrench size={24} className="mb-1" /><span className="text-[10px] font-black">정비</span>
-          </button>
-          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'settings' ? 'text-slate-800 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
-            <Settings size={24} className="mb-1" /><span className="text-[10px] font-black">설정</span>
-          </button>
-        </nav>
-      </div>
-    </div>
-  );
-}
+    <div className="h-[100dvh] flex flex-col bg-slate-50
