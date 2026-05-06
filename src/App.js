@@ -184,17 +184,15 @@ export const handleTouchEnd = (e, closeFunction) => {
   }
 };
 
-// ==========================================
-// 3. 로그인 및 회원가입 화면
-// ==========================================
+
 // ==========================================
 // 3. 로그인 및 회원가입 화면
 // ==========================================
 function LoginScreen({ onLogin, onGoToRegister }) {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true); // 기본값으로 체크해둠
-  const [showInstallGuide, setShowInstallGuide] = useState(false); // 앱 설치 가이드 모달 상태
+  const [rememberMe, setRememberMe] = useState(true);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
 
   // 앱 켤 때 저장된 아이디/비번 불러오기
   useEffect(() => {
@@ -281,7 +279,9 @@ function LoginScreen({ onLogin, onGoToRegister }) {
       {showInstallGuide && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-5">
            <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 text-left shadow-2xl relative">
-              <button onClick={() => setShowInstallGuide(false)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 active:scale-95"><X size={20}/></button>
+              <button onClick={() => setShowInstallGuide(false)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 active:scale-95">
+                <X size={20}/>
+              </button>
               
               <h2 className="text-xl font-black text-gray-900 mb-6 mt-2 flex items-center gap-2">📱 앱으로 설치하기</h2>
               
@@ -290,7 +290,7 @@ function LoginScreen({ onLogin, onGoToRegister }) {
                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <h3 className="text-sm font-black text-blue-600 mb-2 flex items-center gap-1">🍎 아이폰 (Safari 브라우저)</h3>
                     <ol className="text-xs font-bold text-gray-600 space-y-1.5 list-decimal list-inside ml-1 leading-relaxed">
-                       <li>화면 맨 아래 하단 메뉴바 중앙의 <span className="bg-white border px-1 rounded shadow-sm inline-block translate-y-0.5"><Share size={12} className="inline"/> 공유</span> 버튼을 누릅니다.</li>
+                       <li>화면 맨 아래 하단 메뉴바 중앙의 <span className="bg-white border px-1 rounded shadow-sm inline-block translate-y-0.5">공유 📤</span> 버튼을 누릅니다.</li>
                        <li>메뉴를 살짝 올려서 <span className="text-gray-800 bg-gray-200 px-1 rounded">홈 화면에 추가 (+)</span> 를 누릅니다.</li>
                        <li>우측 상단의 <b>[추가]</b>를 누르면 바탕화면에 앱이 생성됩니다!</li>
                     </ol>
@@ -311,6 +311,38 @@ function LoginScreen({ onLogin, onGoToRegister }) {
            </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RegisterScreen({ onRegister, onBackToLogin }) {
+  const [formData, setFormData] = useState({ loginId: '', password: '', name: '', bikeNumber: '', nickname: '', birthYear: '' });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (formData.password.length < 6) return alert("비밀번호는 최소 6자리 이상이어야 합니다!");
+    const fakeEmail = `${formData.loginId.trim().toLowerCase()}@baesamo.com`;
+    const age = new Date().getFullYear() - parseInt(formData.birthYear) + 1;
+    // 초기 상태에 isRiding, isStealth 속성 추가
+    onRegister({ ...formData, email: fakeEmail, age, status: 'pending', isRiding: false, isStealth: false });
+  };
+
+  return (
+    <div className="min-h-screen bg-white p-6 pt-10 flex flex-col items-center overflow-y-auto">
+      <h2 className="text-2xl font-black text-gray-800 mb-6 italic">가입 신청 ✍️</h2>
+      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 pb-10">
+        <div className="bg-blue-50 p-5 rounded-3xl border border-blue-100 space-y-3">
+          <label className="text-[10px] font-black text-blue-500 ml-1">계정 정보</label>
+          <input required placeholder="사용할 아이디" value={formData.loginId} onChange={e => setFormData({ ...formData, loginId: e.target.value })} className="w-full p-3 rounded-xl border border-blue-200 font-bold outline-none" />
+          <input required type="password" placeholder="비밀번호 (6자 이상)" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} className="w-full p-3 rounded-xl border border-blue-200 font-bold outline-none" />
+        </div>
+        <input required placeholder="이름 (실명)" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full p-3 rounded-xl border border-gray-200 font-bold" />
+        <input required placeholder="단톡방 닉네임" value={formData.nickname} onChange={e => setFormData({ ...formData, nickname: e.target.value })} className="w-full p-3 rounded-xl border border-gray-200 font-bold" />
+        <input required placeholder="오토바이 번호 (예: 경기화성라1234)" value={formData.bikeNumber} onChange={e => setFormData({ ...formData, bikeNumber: e.target.value })} className="w-full p-3 rounded-xl border border-gray-200 font-bold" />
+        <input required type="number" placeholder="출생년도 (4자리 숫자)" value={formData.birthYear} onChange={e => setFormData({ ...formData, birthYear: e.target.value })} className="w-full p-3 rounded-xl border border-gray-200 font-bold" />
+        <button type="submit" className="w-full bg-gray-900 text-white py-4 rounded-2xl font-black shadow-lg mt-4 active:scale-95 transition-transform">가입 신청 완료</button>
+        <button type="button" onClick={onBackToLogin} className="w-full text-gray-400 py-2 font-bold text-sm">뒤로 가기</button>
+      </form>
     </div>
   );
 }
