@@ -3,7 +3,6 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 
-// 💡 필수 아이콘 Import (에러 났던 ChevronDownSquare 복구 완료!)
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
   Trash2, Clock, ChevronDown, ChevronUp, ChevronDownSquare,
@@ -29,7 +28,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ==========================================
-// 2. UTILS (새벽 6시 기준 로직 등)
+// 2. UTILS
 // ==========================================
 const getKSTDate = () => {
   const d = new Date();
@@ -41,7 +40,6 @@ const getKSTDateStr = (dateObj = getKSTDate()) => {
   return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
 };
 
-// 새벽 6시 이전이면 전날로 처리
 const getWorkDateStr = () => {
   const now = getKSTDate();
   if (now.getHours() < 6) {
@@ -74,7 +72,7 @@ const getWeekOfMonth = (dateStr) => {
 };
 
 const formatLargeMoney = (v) => {
-  if (v === '' || v === undefined || v === null) return '0';
+  if (!v) return '0';
   const num = typeof v === 'string' ? parseFloat(v.replace(/,/g, '')) : v;
   return isNaN(num) ? '0' : new Intl.NumberFormat('ko-KR').format(num);
 };
@@ -184,10 +182,8 @@ export const handleTouchEnd = (e, closeFunction) => {
 };
 
 // ==========================================
-// 3. 서브 뷰 (정비, 실시간 게시판, 현황)
+// 3. 서브 뷰
 // ==========================================
-
-// --- [정비 관리 뷰] ---
 function MaintenanceView({ user }) {
   const [list, setAllList] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -203,17 +199,14 @@ function MaintenanceView({ user }) {
   const handleSave = async () => {
     if (!formData.item || !formData.cost) return alert("내용을 입력하세요.");
     await addDoc(collection(db, 'maintenance'), { 
-      ...formData, 
-      userId: user.uid, 
-      cost: parseInt(formData.cost.replace(/,/g, '')),
-      mileage: parseInt(formData.mileage.replace(/,/g, '') || 0),
-      createdAt: serverTimestamp() 
+      ...formData, userId: user.uid, cost: parseInt(formData.cost.replace(/,/g, '')),
+      mileage: parseInt(formData.mileage.replace(/,/g, '') || 0), createdAt: serverTimestamp() 
     });
     setModalOpen(false); setStep(1); setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
   };
 
   return (
-    <div className="p-5 space-y-4 animate-in fade-in duration-500 pb-28">
+    <div className="p-5 space-y-4 animate-in fade-in duration-500">
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
         <div><h3 className="text-sm font-black text-slate-400 mb-1">총 정비 지출</h3><p className="text-2xl font-black text-slate-800">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p></div>
         <Wrench size={32} className="text-blue-100" />
@@ -226,7 +219,8 @@ function MaintenanceView({ user }) {
           </div>
         ))}
       </div>
-      <button onClick={() => setModalOpen(true)} className="fixed bottom-24 right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-[0_0_15px_rgba(30,41,59,0.5)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
+      {/* 💡 버튼 하단 메뉴와 안 겹치게 상향 조정 */}
+      <button onClick={() => setModalOpen(true)} className="fixed bottom-[110px] right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-[0_0_15px_rgba(30,41,59,0.5)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
       
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
@@ -263,12 +257,9 @@ function MaintenanceView({ user }) {
   );
 }
 
-// --- [실시간 정보 공지방 (입력 팝업 및 자동완성 적용)] ---
 function InfoBoardView({ user, userData }) {
   const [list, setList] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  // 폼 상태 관리
   const [category, setCategory] = useState('🚨단속/사고');
   const [place, setPlace] = useState('');
   const [quickStatus, setQuickStatus] = useState('');
@@ -293,7 +284,6 @@ function InfoBoardView({ user, userData }) {
     return onSnapshot(q, (s) => setList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
 
-  // 최근 입력값 자동완성 추천 (카테고리별로 장소 추출)
   const recentPlaces = useMemo(() => {
     const places = list.filter(item => item.category === category && item.place).map(item => item.place);
     return [...new Set(places)].slice(0, 5);
@@ -307,26 +297,18 @@ function InfoBoardView({ user, userData }) {
 
   const handleSend = async () => {
     if (category !== '💬기타' && !place.trim()) return alert('위치/매장명을 입력하세요!');
-    
     let finalMsg = '';
-    if (category === '💬기타') {
-        finalMsg = details || quickStatus;
-    } else if (category === '⏳조리지연') {
-        finalMsg = `[${place}] ${quickStatus}\n(🕒 확인시간: ${checkedTime})${details ? '\n💬 '+details : ''}`;
-    } else {
-        finalMsg = `[${place}] ${quickStatus}${details ? '\n💬 '+details : ''}`;
-    }
-
-    await addDoc(collection(db, 'board'), { 
-      category, place, text: finalMsg.trim(), isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: serverTimestamp() 
-    });
+    if (category === '💬기타') { finalMsg = details || quickStatus; } 
+    else if (category === '⏳조리지연') { finalMsg = `[${place}] ${quickStatus}\n(🕒 확인시간: ${checkedTime})${details ? '\n💬 '+details : ''}`; } 
+    else { finalMsg = `[${place}] ${quickStatus}${details ? '\n💬 '+details : ''}`; }
+    await addDoc(collection(db, 'board'), { category, place, text: finalMsg.trim(), isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: serverTimestamp() });
     setIsModalOpen(false);
   };
 
   const sortedList = [...list].sort((a,b) => (b.isUrgent ? 1 : 0) - (a.isUrgent ? 1 : 0));
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500 pb-28">
+    <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500">
       <div className="p-5 space-y-3">
         {sortedList.length === 0 && <div className="py-20 text-center text-slate-400 font-bold text-sm bg-white rounded-2xl border border-dashed border-slate-200">새벽 6시 이후 등록된 실시간 정보가 없습니다.</div>}
         {sortedList.map(item => (
@@ -345,10 +327,10 @@ function InfoBoardView({ user, userData }) {
           </div>
         ))}
       </div>
+      
+      {/* 💡 버튼 하단 메뉴와 안 겹치게 상향 조정 */}
+      <button onClick={handleOpenModal} className="fixed bottom-[110px] right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Edit3 size={24}/></button>
 
-      <button onClick={handleOpenModal} className="fixed bottom-28 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Edit3 size={24}/></button>
-
-      {/* 실시간 톡방 팝업 모달 */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
           <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => setIsModalOpen(false))} className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl animate-in slide-in-from-bottom duration-300 mt-10 border-t-8 border-blue-500 flex flex-col max-h-[95vh]">
@@ -359,56 +341,40 @@ function InfoBoardView({ user, userData }) {
             </div>
             
             <div className="overflow-y-auto no-scrollbar space-y-4 pb-2">
-               {/* 1. 카테고리 선택 */}
                <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
                  {categories.map(cat => (
-                    <button key={cat} type="button" onClick={() => {setCategory(cat); setQuickStatus(''); setPlace('');}} className={`px-3 py-2 rounded-xl text-[11px] font-black shrink-0 transition-colors ${category === cat ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}>
-                      {cat}
-                    </button>
+                    <button key={cat} type="button" onClick={() => {setCategory(cat); setQuickStatus(''); setPlace('');}} className={`px-3 py-2 rounded-xl text-[11px] font-black shrink-0 transition-colors ${category === cat ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}>{cat}</button>
                  ))}
                </div>
 
-               {/* 2. 입력 폼 동적 렌더링 */}
                {category !== '💬기타' && (
                   <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 space-y-3">
                      <div>
                         <label className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1">{category === '⏳조리지연' ? <Store size={12}/> : <MapPin size={12}/>} {category === '⏳조리지연' ? '매장명' : '발생 위치'}</label>
                         <input type="text" value={place} onChange={e=>setPlace(e.target.value)} placeholder={category === '⏳조리지연' ? '예: 교촌치킨 동탄역점' : '예: 동탄역 사거리'} className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400" />
-                        
-                        {/* 💡 자동완성 추천 영역 */}
                         {recentPlaces.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
-                             {recentPlaces.map(rp => (
-                               <button key={rp} type="button" onClick={() => setPlace(rp)} className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black border border-blue-100 active:scale-95">#{rp}</button>
-                             ))}
+                             {recentPlaces.map(rp => (<button key={rp} type="button" onClick={() => setPlace(rp)} className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black border border-blue-100 active:scale-95">#{rp}</button>))}
                           </div>
                         )}
                      </div>
-
-                     {/* 조리지연 시 확인 시간 폼 추가 */}
                      {category === '⏳조리지연' && (
                         <div>
                            <label className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1"><Clock size={12}/> 대기 확인 시간</label>
                            <input type="time" value={checkedTime} onChange={e=>setCheckedTime(e.target.value)} className="w-full bg-slate-50 p-3 rounded-xl font-black text-sm outline-none border border-slate-100 focus:border-blue-400" />
                         </div>
                      )}
-
                      <div>
                         <label className="text-[10px] font-bold text-slate-500 mb-1 block">현재 상황 (빠른 선택)</label>
                         <div className="grid grid-cols-2 gap-1.5">
-                           {quickOpts[category].map(opt => (
-                              <button key={opt} type="button" onClick={() => setQuickStatus(opt)} className={`p-2 rounded-xl text-[11px] font-black transition-colors ${quickStatus === opt ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 border border-slate-100'}`}>{opt}</button>
-                           ))}
+                           {quickOpts[category].map(opt => (<button key={opt} type="button" onClick={() => setQuickStatus(opt)} className={`p-2 rounded-xl text-[11px] font-black transition-colors ${quickStatus === opt ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 border border-slate-100'}`}>{opt}</button>))}
                         </div>
                      </div>
                   </div>
                )}
 
-               {/* 3. 상세 내용 및 중요 공지 체크 */}
                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                   <textarea value={details} onChange={e=>setDetails(e.target.value)} placeholder="추가 상세 내용 (선택)" rows="2" className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400 resize-none mb-3" />
-                  
-                  {/* 방장 권한으로 상단 고정 */}
                   {userData?.status === 'admin' && (
                      <label className="flex items-center gap-2 p-3 bg-rose-50 rounded-xl border border-rose-100 cursor-pointer active:scale-95 transition-transform">
                         <input type="checkbox" checked={isUrgent} onChange={e => setIsUrgent(e.target.checked)} className="w-4 h-4 accent-rose-500" />
@@ -426,12 +392,11 @@ function InfoBoardView({ user, userData }) {
   );
 }
 
-// --- [운행 현황 뷰] ---
 function StatusView({ allUsers }) {
   const active = allUsers.filter(u => u.isRiding && !u.isStealth);
   const inactive = allUsers.filter(u => !u.isRiding || u.isStealth);
   return (
-    <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
+    <div className="p-5 space-y-6">
       <div className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm">
         <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
            <span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중</span>
@@ -1580,6 +1545,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
           );
       })()}
 
+      {/* 💡 플로팅 버튼 상향 고정 (하단 메뉴와 겹침 방지) */}
       <button onClick={() => { 
         const now = getKSTDate();
         const timeNow = formatTimeStr(now);
@@ -1599,7 +1565,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
           endTime: timeNow
         });
         setIsDeliveryModalOpen(true); 
-      }} className="fixed bottom-28 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
+      }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
 
       {/* 심폐소생술 마감 취소 모달 */}
       {showCloseConfirm && (
@@ -1811,9 +1777,9 @@ export default function App() {
   return (
     <div className="h-[100dvh] flex flex-col bg-slate-50 overflow-hidden font-sans select-none">
       
-      {/* --- [1. 고정 헤더 영역] --- */}
+      {/* 💡 [1. 고정 헤더 영역] : 위쪽 빈 공간 다이어트(pt-8) 완료 */}
       <div className="bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 z-40 shrink-0">
-        <header className="px-5 pt-12 pb-3 flex justify-between items-center">
+        <header className="px-5 pt-8 pb-3 flex justify-between items-center" style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}>
           <div>
             <span className="text-[10px] font-black text-blue-500 block mb-0.5 uppercase tracking-widest italic">Delivery Pro</span>
             <h1 className="text-xl font-black">BAESAMO PRO</h1>
@@ -1834,8 +1800,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- [2. 스크롤 본문 영역] --- */}
-      <div className="flex-1 overflow-y-auto no-scrollbar relative">
+      {/* 💡 [2. 스크롤 본문 영역] : 밑에 메뉴바 뒤로 안 숨게 pb-[120px] 투명 쿠션 추가 */}
+      <div className="flex-1 overflow-y-auto no-scrollbar relative pb-[120px]">
         {/* 공지사항 배너 (정보방에서는 제외) */}
         {(displayNotice || activeTab === 'delivery') && activeTab !== 'board' && (
           <div className="px-5 pt-4">
@@ -1858,7 +1824,7 @@ export default function App() {
           {activeTab === 'maintenance' && <MaintenanceView user={user} userData={userData} />}
           {activeTab === 'status' && <StatusView allUsers={allUsers} />}
           {activeTab === 'settings' && (
-            <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
+            <div className="p-5 space-y-6 animate-in fade-in duration-500">
               <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 text-center space-y-4">
                 <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner">🛵</div>
                 <h2 className="text-2xl font-black text-slate-800">{userData.nickname}</h2>
