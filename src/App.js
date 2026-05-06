@@ -1789,4 +1789,122 @@ export default function App() {
   );
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-slate-50
+    <div className="h-[100dvh] flex flex-col bg-slate-50 overflow-hidden font-sans select-none">
+      
+      {/* 💡 [1. 고정 헤더 영역] : 위쪽 빈 공간 다이어트(pt-1) 및 paddingTop 0 세팅 */}
+      <div className="bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 z-40 shrink-0">
+        <header className="px-5 pt-1 pb-3 flex justify-between items-center" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <div>
+            <span className="text-[10px] font-black text-blue-500 block mb-0.5 uppercase tracking-widest italic">Delivery Pro</span>
+            <h1 className="text-xl font-black">BAESAMO PRO</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-slate-100 rounded-full px-3 py-1.5 text-[13px] font-black text-slate-700 shadow-inner">
+               <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-slate-200 rounded-full"><ChevronLeft size={14}/></button>
+               <span className="mx-2">{selectedYear}</span>
+               <button onClick={() => setSelectedYear(selectedYear + 1)} className="p-1 hover:bg-slate-200 rounded-full"><ChevronRight size={14}/></button>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex overflow-x-auto no-scrollbar gap-2 px-5 pb-3">
+          {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+            <button key={m} onClick={() => setSelectedMonth(m)} className={`flex-none px-4 py-1.5 rounded-full font-black text-[13px] transition-all border ${selectedMonth === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}>{m}월</button>
+          ))}
+        </div>
+      </div>
+
+      {/* 💡 [2. 스크롤 본문 영역] : 밑에 메뉴바 뒤로 안 숨게 pb-[120px] 투명 쿠션 추가 */}
+      <div className="flex-1 overflow-y-auto no-scrollbar relative pb-[120px]">
+        {/* 공지사항 배너 (정보방에서는 제외) */}
+        {(displayNotice || activeTab === 'delivery') && activeTab !== 'board' && (
+          <div className="px-5 pt-4">
+            <div onClick={async () => {
+                const txt = prompt("긴급 공지를 입력하세요 (새벽 6시 초기화)", displayNotice);
+                if(txt !== null) await setDoc(doc(db, 'settings', 'globalNotice'), { text: txt.trim(), date: getWorkDateStr() });
+            }} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}>
+              <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}><AlertCircle size={18}/></div>
+              <div className={`flex-1 min-w-0 font-black text-[12px] truncate ${displayNotice ? 'text-rose-600' : 'text-slate-400'}`}>{displayNotice || '+ 실시간 긴급 공지/단속 정보 등록'}</div>
+              <Edit3 size={14} className="text-slate-300 shrink-0"/>
+            </div>
+          </div>
+        )}
+
+        <main className="max-w-md mx-auto min-h-full">
+          {activeTab === 'delivery' && (
+            <DeliveryView user={user} userData={userData} dailyDeliveries={dailyDeliveries} selectedYear={selectedYear} selectedMonth={selectedMonth} />
+          )}
+          {activeTab === 'board' && <InfoBoardView user={user} userData={userData} />}
+          {activeTab === 'maintenance' && <MaintenanceView user={user} userData={userData} />}
+          {activeTab === 'status' && <StatusView allUsers={allUsers} />}
+          {activeTab === 'settings' && (
+            <div className="p-5 space-y-6 animate-in fade-in duration-500">
+              <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 text-center space-y-4">
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner">🛵</div>
+                <h2 className="text-2xl font-black text-slate-800">{userData.nickname}</h2>
+                <div className="bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-black inline-block border border-green-200">{isAdmin ? '👑 방장 (관리자)' : '정식 멤버'}</div>
+                <button onClick={() => signOut(auth)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-black border border-slate-200 active:bg-slate-100">로그아웃</button>
+              </div>
+
+              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                <h3 className="text-sm font-black text-blue-600 mb-3 flex items-center gap-1.5"><Target size={16}/> {selectedMonth}월 목표 설정</h3>
+                <p className="text-xs font-bold text-slate-500 mb-4">이번 달 배달 수익 목표를 설정하고 달성률 바를 확인하세요!</p>
+                <button onClick={async () => {
+                  const val = prompt("목표 금액(숫자만)");
+                  if(val) {
+                    const g = { ...(userData.deliveryGoals || {}), [`${selectedYear}-${String(selectedMonth).padStart(2,'0')}`]: parseInt(val.replace(/[^0-9]/g,'')) };
+                    await updateDoc(doc(db, 'users', user.uid), { deliveryGoals: g });
+                  }
+                }} className="w-full py-4 bg-blue-50 text-blue-600 rounded-2xl font-black text-sm border border-blue-100 active:scale-95 transition-transform shadow-sm">🎯 금액 설정하기</button>
+              </div>
+
+              {isAdmin && (
+                <div className={`bg-white p-6 rounded-[2rem] border ${pendingUsers.length > 0 ? 'border-rose-200 shadow-sm' : 'border-slate-100'}`}>
+                  <h3 className={`text-sm font-black mb-4 flex items-center gap-1.5 ${pendingUsers.length > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                    <Users size={16}/> 승인 대기열 ({pendingUsers.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {pendingUsers.length === 0 ? (
+                        <div className="text-center py-6 text-slate-400 font-bold text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">가입 승인을 대기 중인 멤버가 없습니다.</div>
+                    ) : (
+                        pendingUsers.map(p => (
+                          <div key={p.uid} className="p-4 bg-rose-50 rounded-2xl flex justify-between items-center shadow-sm">
+                            <span className="font-black text-slate-800">{p.nickname}</span>
+                            <div className="flex gap-2">
+                              <button onClick={() => updateDoc(doc(db, 'users', p.uid), { status: 'approved' })} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95">승인</button>
+                              <button onClick={() => deleteDoc(doc(db, 'users', p.uid))} className="bg-white text-rose-500 border border-rose-200 px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95">거절</button>
+                            </div>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* --- [3. 고정 하단 탭바] --- */}
+      <div className="fixed bottom-6 left-0 right-0 pointer-events-none z-50">
+        <nav className="mx-auto max-w-sm pointer-events-auto h-[72px] bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full border border-slate-200/60 flex justify-around items-center px-4">
+          <button onClick={() => setActiveTab('delivery')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'delivery' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+            <Target size={24} className="mb-1" /><span className="text-[10px] font-black">수익</span>
+          </button>
+          <button onClick={() => setActiveTab('board')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'board' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+            <MessageSquare size={24} className="mb-1" /><span className="text-[10px] font-black">정보방</span>
+          </button>
+          <button onClick={() => setActiveTab('status')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'status' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+            <Users size={24} className="mb-1" /><span className="text-[10px] font-black">현황</span>
+          </button>
+          <button onClick={() => setActiveTab('maintenance')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'maintenance' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+            <Wrench size={24} className="mb-1" /><span className="text-[10px] font-black">정비</span>
+          </button>
+          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'settings' ? 'text-slate-800 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+            <Settings size={24} className="mb-1" /><span className="text-[10px] font-black">설정</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  );
+}
