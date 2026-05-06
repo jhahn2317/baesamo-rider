@@ -10,9 +10,8 @@ import {
   CalendarCheck, AlertCircle, Share, Wrench, MessageSquare, Megaphone, ThumbsUp, Flame, MapPin, Store, Building, Search
 } from 'lucide-react';
 
-// ==========================================
-// 1. FIREBASE SETUP
-// ==========================================
+// === [1. 환경설정 및 공통 함수 (Firebase, Utils)] ===
+
 const firebaseConfig = {
   apiKey: "AIzaSyCfRI6es38NWQAIGUAxT5Uxx446TE8AG0c",
   authDomain: "baesamo-app.firebaseapp.com",
@@ -25,9 +24,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// ==========================================
-// 2. UTILS
-// ==========================================
 const getKSTDate = () => { const d = new Date(); return new Date(d.getTime() + (d.getTimezoneOffset() * 60000) + (9 * 3600000)); };
 const getKSTDateStr = (dateObj = getKSTDate()) => `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
 const getWorkDateStr = () => { const now = getKSTDate(); if (now.getHours() < 6) now.setDate(now.getDate() - 1); return getKSTDateStr(now); };
@@ -110,9 +106,8 @@ export const handleTouchEnd = (e, closeFunction) => {
   else { e.currentTarget.style.transform = 'translateY(0)'; setTimeout(() => { e.currentTarget.style.transform = ''; }, 300); }
 };
 
-// ==========================================
-// 3. 서브 뷰
-// ==========================================
+// === [2. 서브 뷰: 정비 관리 (MaintenanceView)] ===
+
 function MaintenanceView({ user }) {
   const [list, setAllList] = useState([]); const [modalOpen, setModalOpen] = useState(false); const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
@@ -120,7 +115,6 @@ function MaintenanceView({ user }) {
 
   useEffect(() => {
     if (!user?.uid) return;
-    // 인덱스 에러 방지를 위해 orderBy 제거 후 클라이언트에서 정렬
     const q = query(collection(db, 'maintenance'), where('userId', '==', user.uid));
     return onSnapshot(q, (s) => { const data = s.docs.map(d => ({ id: d.id, ...d.data() })); data.sort((a, b) => new Date(b.date) - new Date(a.date)); setAllList(data); });
   }, [user.uid]);
@@ -155,7 +149,7 @@ function MaintenanceView({ user }) {
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-10 animate-in slide-in-from-bottom duration-300 border-t-8 border-slate-800">
-            <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black">정비 기록 ({step}/3)</h2><button onClick={() => {setModalOpen(false); setStep(1);}} className="p-2 bg-slate-100 rounded-full"><X size={20}/></button></div>
+            <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black">정비 기록 ({step}/3)</h2><button onClick={() => {setModalOpen(false); setStep(1);}}><X size={20}/></button></div>
             {step === 1 && (<div className="grid grid-cols-2 gap-2"><div className="grid grid-cols-2 col-span-2 gap-2 max-h-[45vh] overflow-y-auto">{items.map(i => (<button key={i} onClick={() => { setFormData({...formData, item: i}); setStep(2); }} className="py-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm active:bg-slate-800 active:text-white">{i}</button>))}</div><button onClick={() => { const v = prompt('정비 항목 입력'); if(v) {setFormData({...formData, item: v}); setStep(2);}}} className="col-span-2 py-4 bg-white border-2 border-dashed border-slate-200 rounded-xl font-bold text-slate-400">직접입력</button></div>)}
             {step === 2 && (<div className="space-y-6 text-center py-4"><p className="font-black text-slate-500 text-lg">언제 정비하셨나요?</p><input type="date" value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})} className="w-full p-5 bg-slate-50 rounded-2xl text-center font-black text-2xl outline-none" /><button onClick={() => setStep(3)} className="w-full py-5 bg-slate-800 text-white rounded-2xl font-black text-lg shadow-lg">다음 단계</button></div>)}
             {step === 3 && (<div className="space-y-6 py-4"><div><label className="text-xs font-black text-slate-400 ml-1 mb-2 block uppercase">비용 (원)</label><input type="text" inputMode="numeric" value={formatLargeMoney(formData.cost)} onChange={e=>setFormData({...formData, cost: e.target.value.replace(/[^0-9]/g, '')})} className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none" /></div><div><label className="text-xs font-black text-slate-400 ml-1 mb-2 block uppercase">주행거리 (선택)</label><input type="text" inputMode="numeric" value={formatLargeMoney(formData.mileage)} onChange={e=>setFormData({...formData, mileage: e.target.value.replace(/[^0-9]/g, '')})} className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none" /></div><button onClick={handleSave} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-lg">저장하기</button></div>)}
@@ -165,6 +159,8 @@ function MaintenanceView({ user }) {
     </div>
   );
 }
+
+// === [3. 서브 뷰: 실시간 정보방 (InfoBoardView)] ===
 
 function InfoBoardView({ user, userData }) {
   const [list, setList] = useState([]); const [isModalOpen, setIsModalOpen] = useState(false);
@@ -185,7 +181,6 @@ function InfoBoardView({ user, userData }) {
 
   const recentPlaces = useMemo(() => [...new Set(list.filter(item => item.category === category && item.place).map(item => item.place))].slice(0, 5), [list, category]);
 
-  // 💡 A동 제외, B동 중앙/일반만 판별하는 로직
   const getLakeOneResult = (roomStr) => {
     if(!roomStr) return null; const r = parseInt(roomStr, 10); if(isNaN(r)) return null;
     const bCenter = [[307,318], [401,426], [463,470], [501,526], [563,570], [601,626], [663,670], [701,726], [763,770], [801,826], [863,870], [901,925], [958,964], [1001,1025], [1058,1064], [1101,1123], [1154,1160], [1201,1221], [1250,1256], [1301,1319], [1346,1352], [1401,1416], [1439,1444], [1501,1512], [1527,1528]];
@@ -224,7 +219,6 @@ function InfoBoardView({ user, userData }) {
       </div>
       <button onClick={handleOpenModal} className="fixed bottom-[110px] right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center z-40 active:scale-90"><Edit3 size={24}/></button>
 
-      {/* 레이크원 B동 내비게이터 모달 */}
       {isLakeOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[110] flex items-end justify-center p-0">
           <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => {setIsLakeOpen(false); setLakeRoom('');})} className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-12 shadow-2xl flex flex-col border-t-8 border-indigo-600">
@@ -238,7 +232,6 @@ function InfoBoardView({ user, userData }) {
         </div>
       )}
 
-      {/* 실시간 톡방 팝업 모달 */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
           <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => setIsModalOpen(false))} className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[95vh] border-t-8 border-blue-500 mt-10">
@@ -268,6 +261,8 @@ function InfoBoardView({ user, userData }) {
   );
 }
 
+// === [4. 서브 뷰: 운행 현황 (StatusView)] ===
+
 function StatusView({ allUsers }) {
   const active = allUsers.filter(u => u.isRiding && !u.isStealth);
   const inactive = allUsers.filter(u => !u.isRiding || u.isStealth);
@@ -284,6 +279,8 @@ function StatusView({ allUsers }) {
     </div>
   );
 }
+
+// === [5. 인증 화면 (LoginScreen, RegisterScreen)] ===
 
 function LoginScreen({ onLogin, onGoToRegister }) {
   const [loginId, setLoginId] = useState(''); const [password, setPassword] = useState(''); const [rememberMe, setRememberMe] = useState(true); const [showInstallGuide, setShowInstallGuide] = useState(false);
@@ -304,9 +301,8 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
   );
 }
 
-// ==========================================
-// 5. 배달 수익 관리 메인 뷰
-// ==========================================
+// === [6. 메인 뷰: 배달 수익 관리 (DeliveryView)] ===
+
 function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth }) {
   const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
   const [deliverySubTab, setDeliverySubTab] = useState('daily');
@@ -984,6 +980,8 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     </div>
   );
 }
+
+// === [7. 최상단 앱 및 하단 메뉴 (App)] ===
 
 export default function App() {
   const [user, setUser] = useState(null); const [userData, setUserData] = useState(null);
