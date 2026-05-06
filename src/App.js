@@ -3,6 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc } from 'firebase/firestore';
 
+// 💡 필수 아이콘 Import (Vercel 에러 방지)
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
   Trash2, Clock, ChevronDown, ChevronUp, 
@@ -45,7 +46,7 @@ const getKSTDateStrFromDate = (dObj) => {
 };
 
 const formatTimeStr = (dateObj) => {
-  if (!dateObj) return '';
+  if (!dateObj || isNaN(dateObj.getTime())) return '';
   return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
 };
 
@@ -323,28 +324,24 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
 }
 
 // ==========================================
-// 4. 배달 수익 관리 메인 뷰 (투폰 기능 지원)
+// 4. 배달 수익 관리 메인 뷰 (투폰 기능 + 목표 게이지 복원)
 // ==========================================
-function DeliveryView({ user, userData, dailyDeliveries }) {
+function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth }) {
   const todayStr = getKSTDateStr();
-  const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
-  const [selectedMonth, setSelectedMonth] = useState(parseInt(todayStr.slice(5, 7)));
+  const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
 
   const [deliverySubTab, setDeliverySubTab] = useState('daily');
   const [deliveryDateRange, setDeliveryDateRange] = useState({ start: '', end: '' });
   const [showDeliveryFilters, setShowDeliveryFilters] = useState(false);
   
-  const [isDeliverySummaryOpen, setIsDeliverySummaryOpen] = useState(false);
-  const [isPendingSummaryOpen, setIsPendingSummaryOpen] = useState(true);
+  const [isDeliverySummaryOpen, setIsDeliverySummaryOpen] = useState(true);
+  const [isPendingSummaryOpen, setIsPendingSummaryOpen] = useState(false);
   const [isYearlySummaryOpen, setIsYearlySummaryOpen] = useState(false);
   
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [mergeModeDate, setMergeModeDate] = useState(null);
   const [selectedShiftsToMerge, setSelectedShiftsToMerge] = useState([]);
   
-  const [calYear, setCalYear] = useState(selectedYear);
-  const [calMonth, setCalMonth] = useState(selectedMonth);
-
   const [splitQueue, setSplitQueue] = useState([]);
   const [recoveryShift, setRecoveryShift] = useState(() => {
     const saved = localStorage.getItem('baesamoRecoveryShift');
@@ -356,11 +353,6 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
     e.stopPropagation();
     setExpandedDailyDates(prev => ({ ...prev, [date]: !prev[date] }));
   };
-
-  useEffect(() => {
-    setCalYear(selectedYear);
-    setCalMonth(selectedMonth);
-  }, [selectedYear, selectedMonth]);
 
   const [selectedShiftDetail, setSelectedShiftDetail] = useState(null);
   const [selectedWeeklySummary, setSelectedWeeklySummary] = useState(null);
@@ -378,7 +370,6 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
   const [deliveryFormData, setDeliveryFormData] = useState(emptyForm);
 
   const [timerActive, setTimerActive] = useState(userData?.isRiding || false);
-  const [trackingStartTime, setTrackingStartTime] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
@@ -387,23 +378,34 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
 
   useEffect(() => {
     let interval;
-    if (timerActive && trackingStartTime) {
-      interval = setInterval(() => setElapsedSeconds(Math.floor((new Date() - new Date(trackingStartTime)) / 1000)), 1000);
+    if (timerActive && userData?.trackingStartTime) {
+      interval = setInterval(() => {
+        const startObj = new Date(userData.trackingStartTime);
+        if (!isNaN(startObj.getTime())) {
+            setElapsedSeconds(Math.floor((new Date() - startObj) / 1000));
+        }
+      }, 1000);
+    } else {
+      setElapsedSeconds(0);
     }
     return () => clearInterval(interval);
-  }, [timerActive, trackingStartTime]);
+  }, [timerActive, userData?.trackingStartTime]);
 
   const handleStartDelivery = async () => {
-    setTrackingStartTime(new Date().toISOString());
-    setTimerActive(true);
-    setElapsedSeconds(0);
-    await updateDoc(doc(db, 'users', user.uid), { isRiding: true, isStealth: false });
+    const nowIso = new Date().toISOString();
+    await updateDoc(doc(db, 'users', user.uid), { 
+      isRiding: true, 
+      isStealth: false,
+      trackingStartTime: nowIso 
+    });
   };
 
   const handleEndDelivery = async () => {
-    setTimerActive(false);
-    setTrackingStartTime(null);
-    await updateDoc(doc(db, 'users', user.uid), { isRiding: false, isStealth: false });
+    await updateDoc(doc(db, 'users', user.uid), { 
+      isRiding: false, 
+      isStealth: false,
+      trackingStartTime: null 
+    });
   };
   
   const toggleStealth = async () => {
@@ -426,9 +428,9 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
     if (deliveryDateRange.start || deliveryDateRange.end) {
       if (deliveryDateRange.start) data = data.filter(d => typeof d?.date === 'string' && d.date >= deliveryDateRange.start);
       if (deliveryDateRange.end) data = data.filter(d => typeof d?.date === 'string' && d.date <= deliveryDateRange.end);
-    } else data = data.filter(d => typeof d?.date === 'string' && d.date.startsWith(`${calYear}-${String(calMonth).padStart(2, '0')}`));
+    } else data = data.filter(d => typeof d?.date === 'string' && d.date.startsWith(currentMonthKey));
     return data;
-  }, [dailyDeliveries, calYear, calMonth, deliveryDateRange]);
+  }, [dailyDeliveries, currentMonthKey, deliveryDateRange]);
 
   const deliveryFilteredTotal = filteredDailyDeliveries.reduce((a,b) => a + (b.amount||0), 0);
   const deliveryFilteredCount = filteredDailyDeliveries.reduce((a,b) => a + (b.count||0), 0);
@@ -695,10 +697,10 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
   };
 
   return (
-    <div className="flex flex-col gap-2 pb-8 pt-1 animate-in fade-in duration-500 text-slate-800 min-h-[80vh]">
+    <div className="flex flex-col gap-2 pb-8 pt-1 animate-in fade-in duration-500 text-slate-800 min-h-[80vh] px-5">
       
       {recoveryShift && !timerActive && (
-         <div className="bg-red-50 border border-red-200 rounded-2xl p-3 shadow-sm flex flex-col gap-2 animate-in slide-in-from-top-2 mx-1 mt-2">
+         <div className="bg-red-50 border border-red-200 rounded-2xl p-3 shadow-sm flex flex-col gap-2 animate-in slide-in-from-top-2 mt-2">
             <div className="flex items-center gap-2">
                <AlertCircle size={16} className="text-red-600" />
                <span className="text-xs font-black text-red-700">저장 안 된 마감 기록이 있습니다!</span>
@@ -719,7 +721,7 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
       )}
 
       {/* 프리미엄 타이머 카드 */}
-      <div className={`mx-1 rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-2 ${timerActive ? (userData.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
+      <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-2 ${timerActive ? (userData.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-3 ml-1">
             <div className={`p-3 rounded-2xl ${timerActive ? 'bg-white/20 text-white animate-pulse shadow-inner' : 'bg-slate-700 text-slate-300 shadow-inner'}`}>
@@ -729,31 +731,33 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
               <div className={`text-[11px] font-black flex items-center mb-0.5 ${timerActive ? 'text-blue-100' : 'text-slate-200'}`}>
                 {userData.isStealth ? 'Stealth Mode On' : 'Live Tracking'}
                 {timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 ${userData.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}
-                {trackingStartTime && timerActive && (
+                {userData?.trackingStartTime && timerActive && (
                    <span className="ml-2 text-[10px] text-blue-100 font-bold bg-white/10 px-1.5 py-0.5 rounded shadow-sm border border-blue-300/30 tracking-tighter">
-                       {new Date(trackingStartTime).getHours().toString().padStart(2,'0')}:{new Date(trackingStartTime).getMinutes().toString().padStart(2,'0')} 시작
+                       {new Date(userData.trackingStartTime).getHours().toString().padStart(2,'0')}:{new Date(userData.trackingStartTime).getMinutes().toString().padStart(2,'0')} 시작
                    </span>
                 )}
               </div>
               <div className={`text-[32px] font-black tracking-tighter leading-none text-white drop-shadow-md`}>
-                 {timerActive && trackingStartTime ? `${Math.floor(elapsedSeconds/3600).toString().padStart(2,'0')}:${String(Math.floor((elapsedSeconds%3600)/60)).padStart(2,'0')}:${String(elapsedSeconds%60).padStart(2,'0')}` : '00:00:00'}
+                 {timerActive && userData?.trackingStartTime ? `${Math.floor(elapsedSeconds/3600).toString().padStart(2,'0')}:${String(Math.floor((elapsedSeconds%3600)/60)).padStart(2,'0')}:${String(elapsedSeconds%60).padStart(2,'0')}` : '00:00:00'}
               </div>
             </div>
           </div>
           <div className="flex flex-col gap-2 items-end">
              <button onClick={() => { 
                if(timerActive) {
-                 const endObj = new Date();
-                 const startObj = new Date(trackingStartTime);
-                 const startDateStr = getKSTDateStrFromDate(startObj);
-                 const endDateStr = getKSTDateStrFromDate(endObj);
-                 if (startDateStr !== endDateStr) {
-                     setDeliveryFormData({ ...emptyForm, date: startDateStr, startTime: formatTimeStr(startObj), endTime: '23:59' });
-                     setSplitQueue([{ date: endDateStr, startTime: '00:00', endTime: formatTimeStr(endObj) }]);
-                 } else {
-                     setDeliveryFormData({ ...emptyForm, date: startDateStr, startTime: formatTimeStr(startObj), endTime: formatTimeStr(endObj) });
-                     setSplitQueue([]);
+                 const now = new Date();
+                 const timeNow = formatTimeStr(now);
+                 let startStr = timeNow;
+                 if (userData?.trackingStartTime) {
+                     const startObj = new Date(userData.trackingStartTime);
+                     if (!isNaN(startObj.getTime())) {
+                         startStr = formatTimeStr(startObj);
+                     }
                  }
+                 const startDateStr = getKSTDateStr();
+                 
+                 setDeliveryFormData({ ...emptyForm, date: startDateStr, startTime: startStr, endTime: timeNow });
+                 setSplitQueue([]);
                  setEditingDeliveryShift(null); 
                  setIsDeliveryModalOpen(true);
                } else {
@@ -762,7 +766,7 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
              }} className={`px-5 py-3 rounded-[1.2rem] font-black text-sm shadow-md transition-all active:scale-95 ${timerActive ? 'bg-white text-blue-700 hover:bg-blue-50' : 'bg-white/20 text-white border border-white/20 hover:bg-white/30'}`}>
                {timerActive ? '마감하기' : '배달 시작'}
              </button>
-             {/* 💡 스텔스 토글 버튼 */}
+             {/* 스텔스 토글 버튼 */}
              {timerActive && (
                <button onClick={toggleStealth} className={`text-[10px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
                   <Ghost size={12}/> {userData.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
@@ -772,8 +776,8 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
         </div>
       </div>
 
-      {/* 요약 카드 영역 */}
-      <div className="mb-1 mx-1 mt-2">
+      {/* 연간 누적 요약 영역 */}
+      <div className="mb-1 mt-2">
         {isYearlySummaryOpen ? (
           <div className="bg-gradient-to-br from-slate-700 to-slate-800 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden mb-1 animate-in fade-in" onClick={() => setIsYearlySummaryOpen(false)}>
             <Bike className="absolute -right-2 -bottom-2 w-32 h-32 opacity-10 rotate-12" fill="white" />
@@ -815,29 +819,47 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
         )}
       </div>
 
-      <div className="flex gap-2 mb-1 mx-1">
-        <button onClick={() => { setIsDeliverySummaryOpen(!isDeliverySummaryOpen); setIsPendingSummaryOpen(false); setIsYearlySummaryOpen(false); }} className={`flex-1 py-3.5 rounded-2xl border text-[13px] font-black transition-colors shadow-sm flex justify-center items-center gap-1.5 ${isDeliverySummaryOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
-           🏍️ {calMonth}월 수익 확인 {isDeliverySummaryOpen ? '∧' : '∨'}
+      <div className="flex gap-2 mb-1">
+        <button onClick={() => { setIsDeliverySummaryOpen(true); setIsPendingSummaryOpen(false); setIsYearlySummaryOpen(false); }} className={`flex-1 py-3.5 rounded-2xl border text-[13px] font-black transition-colors shadow-sm flex justify-center items-center gap-1.5 ${isDeliverySummaryOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
+           🏍️ {selectedMonth}월 수익 확인 {isDeliverySummaryOpen ? '∧' : '∨'}
         </button>
-        <button onClick={() => { setIsPendingSummaryOpen(!isPendingSummaryOpen); setIsDeliverySummaryOpen(false); setIsYearlySummaryOpen(false); }} className={`flex-1 py-3.5 rounded-2xl border text-[13px] font-black transition-colors shadow-sm flex justify-center items-center gap-1.5 ${isPendingSummaryOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
+        <button onClick={() => { setIsPendingSummaryOpen(true); setIsDeliverySummaryOpen(false); setIsYearlySummaryOpen(false); }} className={`flex-1 py-3.5 rounded-2xl border text-[13px] font-black transition-colors shadow-sm flex justify-center items-center gap-1.5 ${isPendingSummaryOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
            💰 정산 예정금 {isPendingSummaryOpen ? '∧' : '∨'}
         </button>
       </div>
 
-      <div className="mx-1">
+      <div>
         {isDeliverySummaryOpen && (() => {
             const baeminTotal = filteredDailyDeliveries.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0);
             const coupangTotal = filteredDailyDeliveries.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0);
 
+            // 💡 월별 목표 로직 계산
+            const goal = userData?.deliveryGoals?.[currentMonthKey] || 0;
+            const pct = goal > 0 ? Math.min(100, (deliveryFilteredTotal / goal) * 100) : 0;
+            const todayObj = new Date();
+            let remainingDays = 0;
+            if (calYear === todayObj.getFullYear() && calMonth === (todayObj.getMonth() + 1)) {
+                const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+                remainingDays = daysInMonth - todayObj.getDate();
+            } else if (todayObj.getFullYear() < calYear || (todayObj.getFullYear() === calYear && (todayObj.getMonth() + 1) < calMonth)) {
+                remainingDays = new Date(calYear, calMonth, 0).getDate();
+            }
+            const timeRatio = remainingDays > 0 ? ((new Date(calYear, calMonth, 0).getDate() - remainingDays) / new Date(calYear, calMonth, 0).getDate()) * 100 : 100;
+            const diff = pct - timeRatio;
+            const remainingAmt = Math.max(0, goal - deliveryFilteredTotal);
+            const dailyReq = remainingDays > 0 ? Math.ceil(remainingAmt / remainingDays) : 0;
+            const goalInMan = goal >= 10000 ? Math.floor(goal / 10000) + '만' : formatLargeMoney(goal);
+            const diffStr = diff >= 0 ? `🔥+${diff.toFixed(1)}% 초과` : `🏃${diff.toFixed(1)}% 미달`;
+
             return (
-              <div className="bg-gradient-to-br from-blue-700 to-indigo-800 rounded-[2rem] p-5 text-white shadow-lg relative overflow-hidden mb-2 animate-in slide-in-from-top-2" onClick={() => setIsDeliverySummaryOpen(false)}>
+              <div className="bg-gradient-to-br from-blue-700 to-indigo-800 rounded-[2rem] p-5 text-white shadow-lg relative overflow-hidden mb-2 animate-in slide-in-from-top-2">
                 <Bike className="absolute -right-2 -bottom-2 w-32 h-32 opacity-10 rotate-12" fill="white" />
                 
-                <div className="flex flex-col mb-4 relative z-10 cursor-pointer">
-                    <div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1">
-                        <ChevronUp size={14}/> {(deliveryDateRange.start || deliveryDateRange.end) ? '지정 기간 수익' : `${calMonth}월 수익 현황`}
+                <div className="flex flex-col mb-4 relative z-10" onClick={() => setIsDeliverySummaryOpen(false)}>
+                    <div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1 cursor-pointer">
+                        <ChevronUp size={14}/> {(deliveryDateRange.start || deliveryDateRange.end) ? '지정 기간 수익' : `${selectedMonth}월 수익 현황`}
                     </div>
-                    <div className="flex justify-between items-end">
+                    <div className="flex justify-between items-end cursor-pointer">
                        <div className="text-[32px] font-black tracking-tighter leading-none">{formatLargeMoney(deliveryFilteredTotal)}<span className="text-base ml-1 opacity-80 font-bold">원</span></div>
                        <div className="flex flex-col items-end gap-1.5 text-[10px] font-bold opacity-90 pb-1">
                           <span className="flex gap-2"><span>총 {formatLargeMoney(deliveryFilteredCount)}건</span><span>{monthlyMetrics.durationStr} 근무</span></span>
@@ -845,6 +867,30 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
                        </div>
                     </div>
                 </div>
+
+                {/* 💡 목표 게이지 표시부 */}
+                {goal > 0 && !deliveryDateRange.start && !deliveryDateRange.end && (
+                   <div className="mb-4 relative z-10">
+                     <div className="w-full bg-slate-900/40 rounded-full h-[24px] relative overflow-hidden shadow-inner border border-white/20">
+                         <div className="bg-blue-400 h-full transition-all duration-1000 shadow-[0_0_10px_rgba(96,165,250,0.8)]" style={{width: `${pct}%`}}></div>
+                         <div className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-white drop-shadow-md whitespace-nowrap">
+                             🎯 목표 {goalInMan} | {pct.toFixed(1)}% 달성 | {diffStr}
+                         </div>
+                         <div className="absolute top-0 bottom-0 w-[2px] bg-rose-400 z-20 shadow-[0_0_5px_rgba(251,113,133,1)]" style={{left: `${timeRatio}%`}}></div>
+                     </div>
+                     {remainingAmt > 0 ? (
+                         remainingDays > 0 && (
+                             <div className="mt-1.5 text-[11px] font-bold text-blue-100 tracking-tight text-center">
+                                 🎯 남은 목표: {formatLargeMoney(remainingAmt)}원 (하루 평균 <span className="text-rose-300 font-black">{formatLargeMoney(dailyReq)}</span>원 필요)
+                             </div>
+                         )
+                     ) : (
+                         <div className="mt-2 text-[12px] font-black text-amber-300 tracking-tight text-center animate-pulse drop-shadow-md">
+                             🎉 보너스 타임! 목표보다 <span className="text-white bg-rose-500/90 px-1.5 py-0.5 rounded border border-rose-400 mx-0.5">+{formatLargeMoney(deliveryFilteredTotal - goal)}</span>원 더 벌었어요 🚀
+                         </div>
+                     )}
+                   </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2 relative z-10">
                    <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm">
@@ -864,7 +910,7 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
       {isPendingSummaryOpen && (() => {
         const upcomingToDisplay = upcomingPaydays.slice(0, 2);
         return (
-            <div className="grid grid-cols-2 gap-2 mb-2 animate-in slide-in-from-top-2 mx-1">
+            <div className="grid grid-cols-2 gap-2 mb-2 animate-in slide-in-from-top-2">
               {upcomingToDisplay.length === 0 ? (
                 <div className="col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-slate-200 text-center text-slate-500 text-sm font-black">입금 대기 중인 정산금이 없습니다.</div>
               ) : (
@@ -912,7 +958,7 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
       })()}
 
       {/* 필터 및 하위 탭바 */}
-      <div className="flex items-center gap-2 mt-2 mx-1">
+      <div className="flex items-center gap-2 mt-2">
         <div className="flex bg-white p-1 rounded-2xl flex-1 shadow-sm border border-slate-200">
           <button onClick={() => setDeliverySubTab('daily')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='daily'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>상세내역</button>
           <button onClick={() => setDeliverySubTab('calendar')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='calendar'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>달력</button>
@@ -922,7 +968,7 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
       </div>
 
       {showDeliveryFilters && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-blue-200 animate-in slide-in-from-top-2 mx-1 mt-2">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-blue-200 animate-in slide-in-from-top-2 mt-2">
           <div className="flex items-center gap-2">
             <input type="date" value={deliveryDateRange.start} onChange={(e) => setDeliveryDateRange({...deliveryDateRange, start: e.target.value})} className="flex-1 bg-slate-50 rounded-xl px-2 h-[44px] text-sm font-black outline-none border border-slate-200 focus:border-blue-500 text-slate-800" />
             <span className="text-slate-400 font-black">~</span>
@@ -939,19 +985,13 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
         const days = Array(firstDay).fill(null).concat(Array.from({length:daysInMonth}, (_,i)=>i+1));
         const dataByDate = {};
         (dailyDeliveries || []).forEach(d => { 
-           if(d.date && d.date.startsWith(`${calYear}-${String(calMonth).padStart(2, '0')}`)) { 
+           if(d.date && d.date.startsWith(currentMonthKey)) { 
                if(!dataByDate[d.date]) dataByDate[d.date] = { amt: 0 }; 
                dataByDate[d.date].amt += (d.amount||0); 
            } 
         });
         return (
-          <div className="bg-white rounded-[2rem] p-4 shadow-sm border border-blue-200 animate-in slide-in-from-bottom-2 mt-3 mx-1">
-             <div className="flex justify-between items-center px-3 mb-4 mt-1">
-                <button onClick={() => { if(calMonth===1){setCalMonth(12); setCalYear(calYear-1);} else setCalMonth(calMonth-1); }} className="p-2 bg-slate-50 text-blue-600 rounded-xl border border-slate-200 shadow-sm active:scale-95"><ChevronLeft size={18}/></button>
-                <span className="font-black text-slate-800 text-[17px]">{calYear}년 {calMonth}월</span>
-                <button onClick={() => { if(calMonth===12){setCalMonth(1); setCalYear(calYear+1);} else setCalMonth(calMonth+1); }} className="p-2 bg-slate-50 text-blue-600 rounded-xl border border-slate-200 shadow-sm active:scale-95"><ChevronRight size={18}/></button>
-             </div>
-
+          <div className="bg-white rounded-[2rem] p-4 shadow-sm border border-blue-200 animate-in slide-in-from-bottom-2 mt-3">
              <div className="grid grid-cols-7 gap-1 text-center mb-2">{['일','월','화','수','목','금','토'].map((d,i) => <div key={d} className={`text-[11px] font-black ${i===0?'text-red-500':i===6?'text-blue-500':'text-slate-500'}`}>{d}</div>)}</div>
              <div className="grid grid-cols-7 gap-1">
                {days.map((d, i) => {
@@ -977,7 +1017,7 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
       })()}
 
       {deliverySubTab === 'weekly' && (
-        <div className="space-y-3 animate-in slide-in-from-right duration-300 mt-3 mx-1">
+        <div className="space-y-3 animate-in slide-in-from-right duration-300 mt-3">
           {pastPaydays.map(pDate => {
              const group = paydayGroups[pDate];
              const metrics = getGroupMetrics(group.items);
@@ -1014,7 +1054,7 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
       )}
 
       {deliverySubTab === 'daily' && (
-        <div className="space-y-3 animate-in slide-in-from-left duration-300 mt-3 mx-1">
+        <div className="space-y-3 animate-in slide-in-from-left duration-300 mt-3">
           {dailyDates.map(date => {
             const shiftList = dailyShifts[date] || [];
             const allItemsForDay = shiftList.flatMap(s => s.items);
@@ -1310,11 +1350,20 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
       <button onClick={() => { 
         const now = new Date();
         const timeNow = formatTimeStr(now);
+        let startStr = timeNow;
+        if (userData?.trackingStartTime) {
+            const startObj = new Date(userData.trackingStartTime);
+            if (!isNaN(startObj.getTime())) {
+                startStr = formatTimeStr(startObj);
+            }
+        }
+        const startDateStr = getKSTDateStr();
+        
         setEditingDeliveryShift(null);
         setDeliveryFormData({ 
           ...emptyForm, 
-          date: getKSTDateStr(),
-          startTime: timeNow,
+          date: startDateStr,
+          startTime: startStr,
           endTime: timeNow
         });
         setIsDeliveryModalOpen(true); 
@@ -1473,6 +1522,7 @@ function StatusView({ allUsers }) {
 
   return (
     <div className="px-5 pt-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 pb-24">
+      {/* 액티브 (운행 중) 섹션 */}
       <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-blue-100">
         <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
           <span className="flex items-center gap-1.5"><Bike size={18}/> 🚀 현재 운행 중인 라이더</span>
@@ -1510,6 +1560,7 @@ function StatusView({ allUsers }) {
         </div>
       </div>
 
+      {/* 인액티브 (비운행) 섹션 */}
       <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100">
         <h2 className="text-sm font-black text-gray-500 mb-4 flex items-center justify-between">
           <span className="flex items-center gap-1.5"><Users size={18}/> ☕ 휴식 중인 라이더</span>
@@ -1633,6 +1684,11 @@ export default function App() {
   const [dailyDeliveries, setDailyDeliveries] = useState([]);
   const [globalNotice, setGlobalNotice] = useState(null);
 
+  // 헤더에 종속될 월/연도 상태 (App으로 상향)
+  const todayStr = getKSTDateStr();
+  const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
+  const [selectedMonth, setSelectedMonth] = useState(parseInt(todayStr.slice(5, 7)));
+
   useEffect(() => {
     const meta = document.createElement('meta');
     meta.name = "viewport";
@@ -1718,17 +1774,26 @@ export default function App() {
     alert('거절(삭제) 되었습니다.');
   };
 
-  const todayStr = getKSTDateStr();
+  // 💡 공지사항: 누구나 클릭해서 작성 가능 (자정 자동 초기화)
   const displayNotice = globalNotice?.date === todayStr ? globalNotice?.text : '';
-
   const handleEditNotice = async () => {
-    if (!isAdmin) return;
-    const newText = prompt("🚨 오늘의 중요 공지를 입력하세요 (경찰 단속, 폭우 등)\n\n※ 자정이 지나면 자동으로 사라집니다.\n※ 내용을 모두 지우고 확인을 누르면 공지가 숨겨집니다.", displayNotice || '');
+    const newText = prompt("🚨 오늘의 중요 공지를 입력하세요 (경찰 단속, 빙판길 등)\n\n※ 자정이 지나면 자동으로 사라집니다.\n※ 내용을 모두 지우고 확인을 누르면 공지가 숨겨집니다.", displayNotice || '');
     if (newText !== null) {
       await setDoc(doc(db, 'settings', 'globalNotice'), {
         text: newText.trim(), date: todayStr, updatedAt: new Date().toISOString(), updatedBy: userData.nickname
       });
     }
+  };
+
+  // 월별 목표 금액 저장 로직 (설정 탭에서 사용)
+  const handleSaveGoal = async () => {
+     const val = prompt(`🎯 ${selectedYear}년 ${selectedMonth}월 목표 금액을 숫자로 입력하세요.`, userData?.deliveryGoals?.[`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`] || '');
+     if (val !== null) {
+        const goalNum = parseInt(val.replace(/[^0-9]/g, '')) || 0;
+        const newGoals = { ...(userData?.deliveryGoals || {}), [`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`]: goalNum };
+        await updateDoc(doc(db, 'users', user.uid), { deliveryGoals: newGoals });
+        alert("목표가 설정되었습니다!");
+     }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center font-black text-blue-500 text-2xl bg-blue-50">🛵 로딩 중...</div>;
@@ -1751,102 +1816,143 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans select-none pb-24 overflow-x-hidden">
-      <header className="bg-white/90 backdrop-blur-md px-6 pt-12 pb-4 shadow-sm border-b sticky top-0 z-40 flex justify-between items-center">
-        <div>
-          <span className="text-[10px] font-black text-blue-500 block mb-0.5 uppercase tracking-widest italic">Baesamo Pro</span>
-          <h1 className="text-xl font-black">
-            {activeTab === 'delivery' ? '내 배달 수익' : activeTab === 'status' ? '실시간 운행 현황' : activeTab === 'admin' ? '방장 전용 메뉴' : '내 정보 관리'}
-          </h1>
-        </div>
-        <div className="bg-blue-50 px-3 py-1.5 rounded-full text-xs font-black text-blue-600 border border-blue-100 shadow-sm flex items-center gap-1.5">
-          {userData.isRiding && !userData.isStealth && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></span>}
-          {isAdmin ? '👑' : ''} {userData.nickname} 님
-        </div>
-      </header>
-
-      {(displayNotice || isAdmin) && activeTab !== 'admin' && (
-        <div className="max-w-md mx-auto px-5 pt-4">
-           <div onClick={isAdmin ? handleEditNotice : undefined} className={`relative overflow-hidden rounded-2xl p-3 flex items-center gap-3 shadow-sm border transition-all ${displayNotice ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-dashed border-gray-300'} ${isAdmin ? 'cursor-pointer active:scale-95 hover:brightness-95' : ''}`}>
-              <div className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full shadow-inner ${displayNotice ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-300 text-white'}`}><AlertCircle size={18} /></div>
-              <div className="flex-1 min-w-0">
-                {displayNotice ? (<div className="font-black text-red-600 text-[13px] leading-snug break-keep">{displayNotice}</div>) : (<div className="font-bold text-gray-400 text-[12px]">+ 관리자 전용: 오늘의 긴급 공지 등록 (자정 초기화)</div>)}
-              </div>
-              {isAdmin && <Edit3 size={14} className={`shrink-0 ${displayNotice ? 'text-red-300' : 'text-gray-300'}`} />}
-           </div>
-        </div>
-      )}
-
-      <main className="max-w-md mx-auto relative min-h-[80vh]">
-        {activeTab === 'delivery' && <DeliveryView user={user} userData={userData} dailyDeliveries={dailyDeliveries} />}
-        {activeTab === 'status' && <StatusView allUsers={allUsers} />}
-        {activeTab === 'admin' && isAdmin && <AdminView allUsers={allUsers} />}
-
-        {activeTab === 'settings' && (
-          <div className="px-5 pt-6 animate-in fade-in slide-in-from-right-4 space-y-4 pb-10">
-            <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100 text-center space-y-6">
-              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner border border-blue-100">🛵</div>
-              <div>
-                <h2 className="text-2xl font-black text-gray-800">{userData.nickname}</h2>
-                <p className="text-sm font-bold text-gray-400 mt-1">{userData.name} · {userData.bikeNumber}</p>
-                <div className="mt-4 inline-flex items-center gap-1 bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-black border border-green-200">
-                  {isAdmin ? '👑 방장 (관리자)' : '승인된 정식 멤버'}
-                </div>
-              </div>
-              <button onClick={() => signOut(auth)} className="w-full bg-gray-50 text-gray-500 py-4 rounded-2xl font-black border border-gray-200 active:scale-95 transition-transform hover:bg-gray-100">안전하게 로그아웃</button>
+    <div className="min-h-screen bg-slate-50 font-sans select-none overflow-hidden flex flex-col">
+      
+      {/* 💡 상단 고정 헤더 & 월별 네비게이션 */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 shrink-0">
+        <header className="px-5 pt-10 pb-3 flex justify-between items-center">
+          <div>
+            <span className="text-[10px] font-black text-blue-500 block mb-0.5 uppercase tracking-widest italic">Delivery Pro</span>
+            <h1 className="text-xl font-black">BAESAMO PRO</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-slate-50 rounded-full px-3 py-1.5 text-sm font-black text-slate-700 border border-slate-200 shadow-inner">
+               <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-slate-200 rounded-full active:scale-95"><ChevronLeft size={16}/></button>
+               <span className="mx-2">{selectedYear}년</span>
+               <button onClick={() => setSelectedYear(selectedYear + 1)} className="p-1 hover:bg-slate-200 rounded-full active:scale-95"><ChevronRight size={16}/></button>
             </div>
+            <button onClick={() => setActiveTab('settings')} className="p-2.5 rounded-full bg-slate-50 border border-slate-200 text-slate-500 active:scale-95 shadow-inner">
+               <Settings size={18}/>
+            </button>
+          </div>
+        </header>
 
-            {isAdmin && (
-              <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-blue-200 animate-in slide-in-from-bottom-4">
-                 <h3 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">👑 가입 승인 대기열</span>
-                    <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[10px]">{pendingUsers.length}명 대기중</span>
-                 </h3>
-                 <div className="space-y-3">
-                    {pendingUsers.length === 0 ? (
-                      <div className="text-center py-6 text-gray-400 font-bold text-xs bg-gray-50 rounded-2xl border border-dashed border-gray-200">가입 승인을 대기 중인 멤버가 없습니다.</div>
-                    ) : (
-                      pendingUsers.map(pUser => (
-                        <div key={pUser.uid} className="flex flex-col gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-200 shadow-sm">
-                           <div className="flex justify-between items-start">
-                              <div>
-                                <div className="font-black text-gray-800 text-base">{pUser.nickname} <span className="text-xs font-bold text-gray-500">({pUser.name})</span></div>
-                                <div className="text-[11px] font-bold text-gray-500 mt-1">오토바이: {pUser.bikeNumber}</div>
-                                <div className="text-[11px] font-bold text-gray-500">출생년도: {pUser.birthYear}년생 ({pUser.age}세)</div>
-                              </div>
-                           </div>
-                           <div className="flex gap-2 mt-1">
-                              <button onClick={() => handleApproveUser(pUser.uid)} className="flex-[2] bg-blue-600 text-white py-2.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">승인하기</button>
-                              <button onClick={() => handleRejectUser(pUser.uid)} className="flex-1 bg-white text-rose-500 border border-rose-200 py-2.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">거절/삭제</button>
-                           </div>
-                        </div>
-                      ))
-                    )}
-                 </div>
-              </div>
-            )}
+        {/* 월별 스크롤 버블 */}
+        <div className="flex overflow-x-auto no-scrollbar gap-2 px-5 pb-3">
+          {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+            <button key={m} onClick={() => setSelectedMonth(m)} className={`flex-none px-5 py-2 rounded-full font-black text-sm transition-all shadow-sm border ${selectedMonth === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+               {m}월
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 💡 스크롤 되는 메인 컨텐츠 영역 */}
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-24">
+        {/* 누구나 작성 가능한 긴급 공지사항 배너 */}
+        {(displayNotice || activeTab === 'delivery') && activeTab !== 'admin' && (
+          <div className="max-w-md mx-auto px-5 pt-4 shrink-0">
+             <div onClick={handleEditNotice} className={`relative overflow-hidden rounded-2xl p-3 flex items-center gap-3 shadow-sm border transition-all cursor-pointer active:scale-95 hover:brightness-95 ${displayNotice ? 'bg-red-50 border-red-200' : 'bg-white border-dashed border-slate-300'}`}>
+                <div className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full shadow-inner ${displayNotice ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-200 text-white'}`}><AlertCircle size={18} /></div>
+                <div className="flex-1 min-w-0">
+                  {displayNotice ? (<div className="font-black text-red-600 text-[13px] leading-snug break-keep">{displayNotice}</div>) : (<div className="font-bold text-slate-400 text-[12px]">+ 오늘의 긴급 단속/기상 공지 등록</div>)}
+                </div>
+                <Edit3 size={14} className={`shrink-0 ${displayNotice ? 'text-red-300' : 'text-slate-300'}`} />
+             </div>
           </div>
         )}
-      </main>
 
-      <nav className="fixed bottom-6 left-4 right-4 h-[72px] bg-white/90 backdrop-blur-xl shadow-2xl rounded-full border border-gray-100 flex justify-around items-center z-50 max-w-md mx-auto">
-        <button onClick={() => setActiveTab('delivery')} className={`flex flex-col items-center w-[18%] transition-all ${activeTab === 'delivery' ? 'text-blue-600 scale-110' : 'text-gray-400 hover:text-gray-500'}`}>
-          <Target size={24} className="mb-1" /><span className="text-[10px] font-black">수익</span>
-        </button>
-        <button onClick={() => setActiveTab('status')} className={`flex flex-col items-center w-[18%] transition-all ${activeTab === 'status' ? 'text-blue-600 scale-110' : 'text-gray-400 hover:text-gray-500'}`}>
-          <Users size={24} className="mb-1" /><span className="text-[10px] font-black">현황</span>
-        </button>
-        
-        {isAdmin && (
-          <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center w-[18%] transition-all ${activeTab === 'admin' ? 'text-orange-500 scale-110' : 'text-gray-400 hover:text-gray-500'}`}>
-            <Crown size={24} className="mb-1" /><span className="text-[10px] font-black">랭킹</span>
+        <main className="max-w-md mx-auto relative min-h-[80vh]">
+          {activeTab === 'delivery' && (
+            <DeliveryView user={user} userData={userData} dailyDeliveries={dailyDeliveries} selectedYear={selectedYear} selectedMonth={selectedMonth} />
+          )}
+
+          {activeTab === 'status' && (
+            <StatusView allUsers={allUsers} />
+          )}
+
+          {activeTab === 'admin' && isAdmin && (
+            <AdminView allUsers={allUsers} />
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="px-5 pt-6 animate-in fade-in slide-in-from-right-4 space-y-4 pb-10">
+              <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 text-center space-y-6">
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner border border-blue-100">🛵</div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-800">{userData.nickname}</h2>
+                  <p className="text-sm font-bold text-slate-400 mt-1">{userData.name} · {userData.bikeNumber}</p>
+                  <div className="mt-4 inline-flex items-center gap-1 bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-black border border-green-200">
+                    {isAdmin ? '👑 방장 (관리자)' : '승인된 정식 멤버'}
+                  </div>
+                </div>
+                <button onClick={() => signOut(auth)} className="w-full bg-slate-50 text-slate-500 py-4 rounded-2xl font-black border border-slate-200 active:scale-95 transition-transform hover:bg-slate-100">안전하게 로그아웃</button>
+              </div>
+
+              {/* 월별 목표 금액 설정 버튼 */}
+              <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 animate-in slide-in-from-bottom-4">
+                 <h3 className="text-sm font-black text-blue-600 mb-3 flex items-center gap-1.5"><Target size={16}/> 월별 목표 금액 설정</h3>
+                 <p className="text-xs font-bold text-slate-500 mb-4">이번 달 배달 수익 목표를 설정하고 달성률 바를 확인하세요!</p>
+                 <button onClick={handleSaveGoal} className="w-full bg-blue-50 text-blue-600 border border-blue-200 py-3.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">
+                    🎯 {selectedMonth}월 목표 설정하기
+                 </button>
+              </div>
+
+              {isAdmin && (
+                <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-blue-200 animate-in slide-in-from-bottom-4">
+                   <h3 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">👑 가입 승인 대기열</span>
+                      <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[10px]">{pendingUsers.length}명 대기중</span>
+                   </h3>
+                   <div className="space-y-3">
+                      {pendingUsers.length === 0 ? (
+                        <div className="text-center py-6 text-slate-400 font-bold text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">가입 승인을 대기 중인 멤버가 없습니다.</div>
+                      ) : (
+                        pendingUsers.map(pUser => (
+                          <div key={pUser.uid} className="flex flex-col gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm">
+                             <div className="flex justify-between items-start">
+                                <div>
+                                  <div className="font-black text-slate-800 text-base">{pUser.nickname} <span className="text-xs font-bold text-slate-500">({pUser.name})</span></div>
+                                  <div className="text-[11px] font-bold text-slate-500 mt-1">오토바이: {pUser.bikeNumber}</div>
+                                  <div className="text-[11px] font-bold text-slate-500">출생년도: {pUser.birthYear}년생 ({pUser.age}세)</div>
+                                </div>
+                             </div>
+                             <div className="flex gap-2 mt-1">
+                                <button onClick={() => handleApproveUser(pUser.uid)} className="flex-[2] bg-blue-600 text-white py-2.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">승인하기</button>
+                                <button onClick={() => handleRejectUser(pUser.uid)} className="flex-1 bg-white text-rose-500 border border-rose-200 py-2.5 rounded-xl text-sm font-black active:scale-95 shadow-sm">거절/삭제</button>
+                             </div>
+                          </div>
+                        ))
+                      )}
+                   </div>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* 💡 하단 탭바 고정 */}
+      <div className="fixed bottom-6 left-0 right-0 pointer-events-none z-50">
+        <nav className="mx-auto max-w-sm pointer-events-auto h-[72px] bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full border border-slate-200/60 flex justify-around items-center px-4">
+          <button onClick={() => setActiveTab('delivery')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'delivery' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+            <Target size={24} className="mb-1" /><span className="text-[10px] font-black">수익</span>
           </button>
-        )}
+          <button onClick={() => setActiveTab('status')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'status' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+            <Users size={24} className="mb-1" /><span className="text-[10px] font-black">현황</span>
+          </button>
+          
+          {isAdmin && (
+            <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'admin' ? 'text-orange-500 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+              <Crown size={24} className="mb-1" /><span className="text-[10px] font-black">랭킹</span>
+            </button>
+          )}
 
-        <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center w-[18%] transition-all ${activeTab === 'settings' ? 'text-gray-800 scale-110' : 'text-gray-400 hover:text-gray-500'}`}>
-          <Settings size={24} className="mb-1" /><span className="text-[10px] font-black">설정</span>
-        </button>
-      </nav>
+          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'settings' ? 'text-slate-800 scale-110' : 'text-slate-400 hover:text-slate-500'}`}>
+            <Settings size={24} className="mb-1" /><span className="text-[10px] font-black">설정</span>
+          </button>
+        </nav>
+      </div>
     </div>
   );
 }
