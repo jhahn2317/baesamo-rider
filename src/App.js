@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc } from 'firebase/firestore';
 
-// 💡 Vercel 에러 방지를 위해 실제 사용하는 아이콘만 깔끔하게 Import!
+// 💡 필수 아이콘 Import (Vercel 에러 방지용)
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
   Trash2, Clock, ChevronDown, ChevronUp, 
@@ -44,7 +44,10 @@ const getKSTDateStrFromDate = (dObj) => {
   return `${kstTime.getFullYear()}-${String(kstTime.getMonth() + 1).padStart(2, '0')}-${String(kstTime.getDate()).padStart(2, '0')}`;
 };
 
-const formatTimeStr = (dateObj) => `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+const formatTimeStr = (dateObj) => {
+  if (!dateObj) return '';
+  return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+};
 
 const getPaydayStr = (dateString) => {
   if (!dateString || typeof dateString !== 'string') return '';
@@ -59,7 +62,6 @@ const getPaydayStr = (dateString) => {
 const getWeekOfMonth = (dateStr) => {
   if (!dateStr || typeof dateStr !== 'string') return 1;
   const date = new Date(dateStr);
-  if(isNaN(date.getTime())) return 1;
   const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
   return Math.ceil((date.getDate() + firstDay) / 7);
 };
@@ -75,7 +77,6 @@ const formatCompactMoney = (val) => {
   const absVal = Math.abs(val);
   if (absVal >= 10000) {
     const v = absVal / 10000;
-    if (v >= 100) return Math.floor(v) + '만'; 
     return (Number.isInteger(v) ? v : v.toFixed(1)) + '만';
   }
   return new Intl.NumberFormat('ko-KR').format(absVal);
@@ -185,7 +186,7 @@ export const handleTouchEnd = (e, closeFunction) => {
 };
 
 // ==========================================
-// 3. 로그인 및 회원가입 화면 (비밀번호 저장 & 앱 설치 안내 포함)
+// 3. 로그인 및 회원가입 화면
 // ==========================================
 function LoginScreen({ onLogin, onGoToRegister }) {
   const [loginId, setLoginId] = useState('');
@@ -225,45 +226,62 @@ function LoginScreen({ onLogin, onGoToRegister }) {
       <p className="text-gray-500 text-xs mb-8 font-bold">배달을 사랑하는 모임 전용 수익 관리 앱</p>
       
       <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-3">
-        <input required type="text" value={loginId} onChange={e => setLoginId(e.target.value)} placeholder="아이디" autoComplete="username" className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm focus:ring-2 focus:ring-blue-400 transition-all" />
-        <input required type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="비밀번호" autoComplete="current-password" className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm focus:ring-2 focus:ring-blue-400 transition-all" />
+        <input 
+          required type="text" value={loginId} onChange={e => setLoginId(e.target.value)} 
+          placeholder="아이디" autoComplete="username"
+          className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm focus:ring-2 focus:ring-blue-400 transition-all" 
+        />
+        <input 
+          required type="password" value={password} onChange={e => setPassword(e.target.value)} 
+          placeholder="비밀번호" autoComplete="current-password"
+          className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm focus:ring-2 focus:ring-blue-400 transition-all" 
+        />
         
         <label className="flex items-center justify-start gap-2 pt-1 pb-2 cursor-pointer ml-1">
           <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 accent-blue-600 rounded cursor-pointer" />
           <span className="text-xs font-bold text-gray-500 cursor-pointer">아이디/비밀번호 저장 (자동로그인)</span>
         </label>
 
-        <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-[1.2rem] font-black text-lg shadow-md active:scale-95 transition-transform">🔑 로그인</button>
+        <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-[1.2rem] font-black text-lg shadow-md active:scale-95 transition-transform">
+          🔑 로그인
+        </button>
       </form>
 
       <div className="mt-8 flex flex-col gap-4">
-        <button onClick={onGoToRegister} className="text-sm font-black text-gray-400 underline decoration-2 underline-offset-4 active:text-gray-600">✍️ 아직 계정이 없으신가요? 가입하기</button>
-        <button onClick={() => setShowInstallGuide(true)} className="text-xs font-black text-blue-500 bg-blue-100/50 px-4 py-2 rounded-full border border-blue-200 shadow-sm active:scale-95 transition-transform mt-6">📲 내 스마트폰에 앱으로 설치하는 방법</button>
+        <button onClick={onGoToRegister} className="text-sm font-black text-gray-400 underline decoration-2 underline-offset-4 active:text-gray-600">
+          ✍️ 아직 계정이 없으신가요? 가입하기
+        </button>
+        <button onClick={() => setShowInstallGuide(true)} className="text-xs font-black text-blue-500 bg-blue-100/50 px-4 py-2 rounded-full border border-blue-200 shadow-sm active:scale-95 transition-transform mt-6">
+          📲 내 스마트폰에 앱으로 설치하는 방법
+        </button>
       </div>
 
       {showInstallGuide && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-5">
            <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 text-left shadow-2xl relative">
               <button onClick={() => setShowInstallGuide(false)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 active:scale-95"><X size={20}/></button>
+              
               <h2 className="text-xl font-black text-gray-900 mb-6 mt-2 flex items-center gap-2">📱 앱으로 설치하기</h2>
+              
               <div className="space-y-6">
                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <h3 className="text-sm font-black text-blue-600 mb-2 flex items-center gap-1">🍎 아이폰 (Safari 브라우저)</h3>
                     <ol className="text-xs font-bold text-gray-600 space-y-1.5 list-decimal list-inside ml-1 leading-relaxed">
-                       <li>화면 하단 메뉴바 중앙의 <span className="bg-white border px-1 rounded shadow-sm inline-block translate-y-0.5"><Share size={12} className="inline"/> 공유</span> 버튼 터치</li>
-                       <li>메뉴를 위로 올려 <span className="text-gray-800 bg-gray-200 px-1 rounded">홈 화면에 추가 (+)</span> 터치</li>
-                       <li>우측 상단의 <b>[추가]</b>를 누르면 바탕화면에 생성!</li>
+                       <li>화면 하단 메뉴바 중앙의 <span className="bg-white border px-1 rounded shadow-sm inline-block translate-y-0.5"><Share size={12} className="inline"/> 공유</span> 버튼을 누릅니다.</li>
+                       <li>메뉴를 위로 올려 <span className="text-gray-800 bg-gray-200 px-1 rounded">홈 화면에 추가 (+)</span> 를 누릅니다.</li>
+                       <li>우측 상단의 <b>[추가]</b>를 누르면 바탕화면에 생성됩니다!</li>
                     </ol>
                  </div>
                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <h3 className="text-sm font-black text-green-600 mb-2 flex items-center gap-1">🤖 안드로이드 (Chrome 브라우저)</h3>
                     <ol className="text-xs font-bold text-gray-600 space-y-1.5 list-decimal list-inside ml-1 leading-relaxed">
-                       <li>화면 우측 상단의 <span className="text-gray-800 bg-gray-200 px-1 rounded font-black tracking-widest">⋮</span> (점 3개) 버튼 터치</li>
-                       <li>메뉴에서 <span className="text-gray-800 bg-gray-200 px-1 rounded">홈 화면에 추가</span> 또는 <span className="text-gray-800 bg-gray-200 px-1 rounded">앱 설치</span> 터치</li>
-                       <li>설치를 수락하면 바탕화면에 생성!</li>
+                       <li>화면 우측 상단의 <span className="text-gray-800 bg-gray-200 px-1 rounded font-black tracking-widest">⋮</span> (점 3개) 버튼을 누릅니다.</li>
+                       <li>메뉴에서 <span className="text-gray-800 bg-gray-200 px-1 rounded">홈 화면에 추가</span> 또는 <span className="text-gray-800 bg-gray-200 px-1 rounded">앱 설치</span>를 누릅니다.</li>
+                       <li>설치를 수락하면 바탕화면에 앱이 생성됩니다!</li>
                     </ol>
                  </div>
               </div>
+
               <button onClick={() => setShowInstallGuide(false)} className="w-full bg-blue-600 text-white font-black text-sm py-4 rounded-2xl mt-6 shadow-md active:scale-95 transition-transform">확인했습니다</button>
            </div>
         </div>
@@ -304,7 +322,7 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
 }
 
 // ==========================================
-// 4. 배달 수익 관리 메인 뷰 (투폰 지원)
+// 4. 배달 수익 관리 메인 뷰 (투폰 기능 추가)
 // ==========================================
 function DeliveryView({ user, userData, dailyDeliveries }) {
   const todayStr = getKSTDateStr();
@@ -666,7 +684,6 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
   const NetDiffInfo = ({ device, platform, inputAmt, inputCnt, date }) => {
      const saved = getTodaySaved(device, platform, date);
      if (saved.amt === 0 && saved.cnt === 0) return null;
-     
      const netAmt = Math.max(0, (parseInt(String(inputAmt).replace(/,/g,''))||0) - saved.amt);
      return (
          <div className="text-[11px] text-blue-600 ml-[68px] font-black flex items-center gap-1 mt-1 pb-1 tracking-tight">
@@ -743,7 +760,6 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
              }} className={`px-5 py-3 rounded-[1.2rem] font-black text-sm shadow-md transition-all active:scale-95 ${timerActive ? 'bg-white text-blue-700 hover:bg-blue-50' : 'bg-white/20 text-white border border-white/20 hover:bg-white/30'}`}>
                {timerActive ? '마감하기' : '배달 시작'}
              </button>
-             {/* 스텔스 토글 버튼 */}
              {timerActive && (
                <button onClick={toggleStealth} className={`text-[10px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
                   <Ghost size={12}/> {userData.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
@@ -758,7 +774,6 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
         {isYearlySummaryOpen ? (
           <div className="bg-gradient-to-br from-slate-700 to-slate-800 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden mb-1 animate-in fade-in" onClick={() => setIsYearlySummaryOpen(false)}>
             <Bike className="absolute -right-2 -bottom-2 w-32 h-32 opacity-10 rotate-12" fill="white" />
-            
             <div className="flex justify-between items-end mb-4 relative z-10 cursor-pointer gap-2">
               <div className="flex-1 min-w-0">
                   <div className="text-[12px] font-black opacity-90 mb-1 flex items-center gap-1 text-slate-300 whitespace-nowrap">
@@ -852,7 +867,6 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
                 upcomingToDisplay.map((pd, idx) => {
                   const group = pendingByPayday[pd];
                   const metrics = getGroupMetrics(group.items);
-                  const isSingle = upcomingToDisplay.length === 1;
                   
                   const baeminTot = group.items.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0);
                   const coupangTot = group.items.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0);
@@ -860,7 +874,6 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
                   return (
                     <div key={pd} onClick={() => setSelectedWeeklySummary(pd)} className={`rounded-[2rem] p-5 shadow-lg border bg-gradient-to-br from-teal-700 to-cyan-800 border-teal-600 flex flex-col justify-between cursor-pointer active:scale-95 transition-transform text-white relative overflow-hidden col-span-2`}>
                       <Bike className="absolute -right-2 -bottom-2 w-32 h-32 opacity-10 rotate-12" fill="white" />
-                      
                       <div className="flex flex-col mb-4 relative z-10">
                           <div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1">
                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm border ${idx === 0 ? 'bg-white text-teal-700 border-white' : 'bg-teal-600 text-white border-teal-500'}`}>{idx === 0 ? '이번주' : '다음주'}</span>
@@ -874,7 +887,6 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
                              </div>
                           </div>
                       </div>
-                      
                       <div className="grid grid-cols-2 gap-2 relative z-10">
                          <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm">
                            <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">기본기기</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.main || 0)}원</span></div>
@@ -1352,10 +1364,14 @@ function DeliveryView({ user, userData, dailyDeliveries }) {
       })()}
 
       <button onClick={() => { 
+        const now = new Date();
+        const timeNow = formatTimeStr(now);
         setEditingDeliveryShift(null);
         setDeliveryFormData({ 
           ...emptyForm, 
-          date: todayStr 
+          date: getKSTDateStr(),
+          startTime: timeNow,
+          endTime: timeNow
         });
         setIsDeliveryModalOpen(true); 
       }} className="fixed bottom-24 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
@@ -1587,6 +1603,9 @@ export default function App() {
   const [showRegister, setShowRegister] = useState(false);
   const [activeTab, setActiveTab] = useState('delivery');
   const [dailyDeliveries, setDailyDeliveries] = useState([]);
+  
+  // 글로벌 긴급 공지 상태 추가
+  const [globalNotice, setGlobalNotice] = useState(null);
 
   // 화면 확대/축소 방지
   useEffect(() => {
@@ -1594,6 +1613,15 @@ export default function App() {
     meta.name = "viewport";
     meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no";
     document.getElementsByTagName('head')[0].appendChild(meta);
+
+    // iOS 더블 탭 줌 방지
+    const preventZoom = (e) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('touchstart', preventZoom, { passive: false });
+    return () => document.removeEventListener('touchstart', preventZoom);
   }, []);
 
   // 인증 및 실시간 감시
@@ -1608,7 +1636,7 @@ export default function App() {
           setLoading(false);
         });
 
-        // 💡 status가 'approved' 또는 'admin'인 유저 모두 불러오기 (현황판용)
+        // 승인된 모든 유저 감시 (현황판용)
         const approvedQuery = query(collection(db, 'users'), where('status', 'in', ['approved', 'admin']));
         onSnapshot(approvedQuery, (s) => {
            const users = s.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
@@ -1621,18 +1649,26 @@ export default function App() {
           const docs = s.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setDailyDeliveries(docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse());
         });
+
+        // 글로벌 긴급 공지 감시
+        onSnapshot(doc(db, 'settings', 'globalNotice'), (s) => {
+          if (s.exists()) setGlobalNotice(s.data());
+          else setGlobalNotice(null);
+        });
+
       } else {
         setUser(null);
         setUserData(null);
         setAllUsers([]);
         setPendingUsers([]);
+        setGlobalNotice(null);
         setLoading(false);
       }
     });
     return () => unsub();
   }, []);
 
-  // 💡 관리자 판단 로직 (status가 'admin'이거나 isAdmin이 true일 때)
+  // 관리자 판단 로직
   const isAdmin = userData?.status === 'admin' || userData?.isAdmin === true;
 
   // 관리자용 가입 대기열 감시
@@ -1673,6 +1709,24 @@ export default function App() {
     alert('거절(삭제) 되었습니다.');
   };
 
+  // 공지사항 자동 초기화 로직 및 등록 함수
+  const todayStr = getKSTDateStr();
+  // 공지사항의 날짜가 '오늘'일 때만 글자를 보여줌 (자정 지나면 자동 숨김)
+  const displayNotice = globalNotice?.date === todayStr ? globalNotice?.text : '';
+
+  const handleEditNotice = async () => {
+    if (!isAdmin) return;
+    const newText = prompt("🚨 오늘의 중요 공지를 입력하세요 (경찰 단속, 폭우 등)\n\n※ 자정이 지나면 자동으로 사라집니다.\n※ 내용을 모두 지우고 확인을 누르면 공지가 숨겨집니다.", displayNotice || '');
+    if (newText !== null) {
+      await setDoc(doc(db, 'settings', 'globalNotice'), {
+        text: newText.trim(),
+        date: todayStr, // 등록한 날짜 박제 (자정 초기화용)
+        updatedAt: new Date().toISOString(),
+        updatedBy: userData.nickname
+      });
+    }
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center font-black text-blue-500 text-2xl bg-blue-50">🛵 로딩 중...</div>;
 
   if (!user) {
@@ -1706,6 +1760,32 @@ export default function App() {
           {isAdmin ? '👑' : ''} {userData.nickname} 님
         </div>
       </header>
+
+      {/* 글로벌 공지사항 배너 (헤더 바로 아래, 내용 최상단에 항상 노출) */}
+      {(displayNotice || isAdmin) && (
+        <div className="max-w-md mx-auto px-5 pt-4">
+           <div 
+             onClick={isAdmin ? handleEditNotice : undefined}
+             className={`relative overflow-hidden rounded-2xl p-3 flex items-center gap-3 shadow-sm border transition-all ${displayNotice ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-dashed border-gray-300'} ${isAdmin ? 'cursor-pointer active:scale-95 hover:brightness-95' : ''}`}
+           >
+              <div className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full shadow-inner ${displayNotice ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-300 text-white'}`}>
+                <AlertCircle size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                {displayNotice ? (
+                  <div className="font-black text-red-600 text-[13px] leading-snug break-keep">
+                    {displayNotice}
+                  </div>
+                ) : (
+                  <div className="font-bold text-gray-400 text-[12px]">
+                    + 관리자 전용: 오늘의 긴급 공지 등록 (자정 초기화)
+                  </div>
+                )}
+              </div>
+              {isAdmin && <Edit3 size={14} className={`shrink-0 ${displayNotice ? 'text-red-300' : 'text-gray-300'}`} />}
+           </div>
+        </div>
+      )}
 
       <main className="max-w-md mx-auto relative min-h-[80vh]">
         {activeTab === 'delivery' && (
