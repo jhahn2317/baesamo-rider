@@ -3,7 +3,6 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 
-// 💡 필수 아이콘 Import
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, Trash2, Clock, ChevronDown, ChevronUp, ChevronDownSquare,
   Target, Edit3, X, Timer, Coins, Filter, RefreshCw, ChevronLeft, ChevronRight, Settings, Users, Ghost,
@@ -13,12 +12,9 @@ import {
 // === [1. 환경설정 및 공통 함수 (Firebase, Utils)] ===
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCfRI6es38NWQAIGUAxT5Uxx446TE8AG0c",
-  authDomain: "baesamo-app.firebaseapp.com",
-  projectId: "baesamo-app",
-  storageBucket: "baesamo-app.firebasestorage.app",
-  messagingSenderId: "246846263578",
-  appId: "1:246846263578:web:7b77296cddbe144e1a1ca3"
+  apiKey: "AIzaSyCfRI6es38NWQAIGUAxT5Uxx446TE8AG0c", authDomain: "baesamo-app.firebaseapp.com",
+  projectId: "baesamo-app", storageBucket: "baesamo-app.firebasestorage.app",
+  messagingSenderId: "246846263578", appId: "1:246846263578:web:7b77296cddbe144e1a1ca3"
 };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -47,20 +43,15 @@ const calcDailyMetrics = (deliveries) => {
   if (!deliveries || deliveries.length === 0) return { durationStr: '', hourlyRate: 0, perDelivery: 0, totalCnt: 0, totalAmt: 0 };
   let intervals = [];
   deliveries.forEach(d => {
-    if(d.startTime && d.endTime && typeof d.startTime === 'string' && typeof d.endTime === 'string') {
+    if(d.startTime && d.endTime) {
       let [sh, sm] = d.startTime.split(':').map(Number); let [eh, em] = d.endTime.split(':').map(Number);
-      if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
-        let start = sh * 60 + sm; let end = eh * 60 + em; if (end <= start) end += 1440; intervals.push({start, end});
-      }
+      if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) { let start = sh * 60 + sm; let end = eh * 60 + em; if (end <= start) end += 1440; intervals.push({start, end}); }
     }
   });
   intervals.sort((a,b) => a.start - b.start); let merged = [];
   if (intervals.length > 0) {
     let current = {...intervals[0]};
-    for(let i=1; i<intervals.length; i++) {
-      if (intervals[i].start <= current.end) current.end = Math.max(current.end, intervals[i].end);
-      else { merged.push(current); current = {...intervals[i]}; }
-    }
+    for(let i=1; i<intervals.length; i++) { if (intervals[i].start <= current.end) current.end = Math.max(current.end, intervals[i].end); else { merged.push(current); current = {...intervals[i]}; } }
     merged.push(current);
   }
   let totalMins = merged.reduce((acc, curr) => acc + (curr.end - curr.start), 0);
@@ -76,17 +67,12 @@ const getGroupMetrics = (items) => {
   Object.values(byDate).forEach(dayItems => {
     let intervals = [];
     dayItems.forEach(d => {
-      if(d.startTime && d.endTime) {
-        let [sh, sm] = d.startTime.split(':').map(Number); let [eh, em] = d.endTime.split(':').map(Number);
-        let start = sh * 60 + sm; let end = eh * 60 + em; if (end <= start) end += 1440; intervals.push({start, end});
-      }
+      if(d.startTime && d.endTime) { let [sh, sm] = d.startTime.split(':').map(Number); let [eh, em] = d.endTime.split(':').map(Number); let start = sh * 60 + sm; let end = eh * 60 + em; if (end <= start) end += 1440; intervals.push({start, end}); }
     });
     intervals.sort((a,b) => a.start - b.start); let merged = [];
     if (intervals.length > 0) {
       let current = {...intervals[0]};
-      for(let i=1; i<intervals.length; i++) {
-        if (intervals[i].start <= current.end) current.end = Math.max(current.end, intervals[i].end); else { merged.push(current); current = {...intervals[i]}; }
-      }
+      for(let i=1; i<intervals.length; i++) { if (intervals[i].start <= current.end) current.end = Math.max(current.end, intervals[i].end); else { merged.push(current); current = {...intervals[i]}; } }
       merged.push(current);
     }
     totalMins += merged.reduce((acc, curr) => acc + (curr.end - curr.start), 0);
@@ -106,15 +92,11 @@ export const handleTouchEnd = (e, closeFunction) => {
   else { e.currentTarget.style.transform = 'translateY(0)'; setTimeout(() => { e.currentTarget.style.transform = ''; }, 300); }
 };
 
-
 // === [2. 서브 뷰: 정비 관리 (MaintenanceView)] ===
 
 function MaintenanceView({ user }) {
-  const [list, setAllList] = useState([]); 
-  const [modalOpen, setModalOpen] = useState(false); 
-  const [step, setStep] = useState(1);
+  const [list, setAllList] = useState([]); const [modalOpen, setModalOpen] = useState(false); const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
-  
   const [selectedFilter, setSelectedFilter] = useState('전체');
   const filters = ['전체', '오일', '패드', '타이어', '기타'];
   const items = ['엔진오일', '앞브레이크패드', '뒷브레이크패드', '벨트', '앞타이어', '뒷타이어', '배터리', '미션오일', '점화플러그'];
@@ -123,9 +105,7 @@ function MaintenanceView({ user }) {
     if (!user?.uid) return;
     const q = query(collection(db, 'maintenance'), where('userId', '==', user.uid));
     return onSnapshot(q, (s) => { 
-      const data = s.docs.map(d => ({ id: d.id, ...d.data() })); 
-      data.sort((a, b) => new Date(b.date) - new Date(a.date)); 
-      setAllList(data); 
+      const data = s.docs.map(d => ({ id: d.id, ...d.data() })); data.sort((a, b) => new Date(b.date) - new Date(a.date)); setAllList(data); 
     });
   }, [user.uid]);
 
@@ -154,46 +134,25 @@ function MaintenanceView({ user }) {
   return (
     <div className="p-5 space-y-3 animate-in fade-in duration-500 pb-28">
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex justify-between items-center">
-        <div>
-          <h3 className="text-[11px] font-black text-slate-400 mb-0.5 tracking-tight">총 정비 지출</h3>
-          <p className="text-2xl font-black text-slate-800 tracking-tighter leading-none">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p>
-        </div>
+        <div><h3 className="text-[11px] font-black text-slate-400 mb-0.5 tracking-tight">총 정비 지출</h3><p className="text-2xl font-black text-slate-800 tracking-tighter leading-none">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p></div>
         <Wrench size={28} className="text-blue-100" />
       </div>
-
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
-        {filters.map(f => (
-          <button key={f} onClick={() => setSelectedFilter(f)} className={`px-3.5 py-1.5 rounded-full text-[11px] font-black shrink-0 transition-all shadow-sm ${selectedFilter === f ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
-            {f}
-          </button>
-        ))}
+        {filters.map(f => (<button key={f} onClick={() => setSelectedFilter(f)} className={`px-3.5 py-1.5 rounded-full text-[11px] font-black shrink-0 transition-all shadow-sm ${selectedFilter === f ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>{f}</button>))}
       </div>
-
       <div className="space-y-2">
         {filteredList.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-[1.5rem] border border-dashed border-slate-200">
-             <Wrench className="mx-auto text-slate-200 mb-2" size={32}/>
-             <p className="text-slate-400 font-bold text-xs">해당하는 정비 내역이 없습니다.</p>
-          </div>
+          <div className="text-center py-16 bg-white rounded-[1.5rem] border border-dashed border-slate-200"><Wrench className="mx-auto text-slate-200 mb-2" size={32}/><p className="text-slate-400 font-bold text-xs">해당하는 정비 내역이 없습니다.</p></div>
         ) : (
           filteredList.map(m => (
             <div key={m.id} className="bg-white px-4 py-3 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm active:scale-95 transition-transform">
-              <div className="flex flex-col">
-                <p className="text-[9px] font-bold text-slate-400 mb-0.5">{m.date}</p>
-                <p className="font-black text-slate-800 text-[13px] leading-none">{m.item}</p>
-                {m.mileage > 0 && <p className="text-[9px] text-blue-500 font-bold italic mt-1">{formatLargeMoney(m.mileage)}km 교체</p>}
-              </div>
-              <div className="flex flex-col items-end">
-                <p className="font-black text-blue-600 text-[14px] leading-none">{formatLargeMoney(m.cost)}원</p>
-                <button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1.5 active:scale-90 p-1 -mr-1"><Trash2 size={12}/></button>
-              </div>
+              <div className="flex flex-col"><p className="text-[9px] font-bold text-slate-400 mb-0.5">{m.date}</p><p className="font-black text-slate-800 text-[13px] leading-none">{m.item}</p>{m.mileage > 0 && <p className="text-[9px] text-blue-500 font-bold italic mt-1">{formatLargeMoney(m.mileage)}km 교체</p>}</div>
+              <div className="flex flex-col items-end"><p className="font-black text-blue-600 text-[14px] leading-none">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1.5 active:scale-90 p-1 -mr-1"><Trash2 size={12}/></button></div>
             </div>
           ))
         )}
       </div>
-
       <button onClick={() => setModalOpen(true)} className="fixed bottom-[110px] right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-lg flex items-center justify-center z-40 active:scale-95 transition-all"><Plus size={28}/></button>
-      
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-10 animate-in slide-in-from-bottom duration-300 border-t-8 border-slate-800">
@@ -211,7 +170,7 @@ function MaintenanceView({ user }) {
 
 // === [3. 서브 뷰: 실시간 정보방 (InfoBoardView)] ===
 
-function InfoBoardView({ user, userData }) {
+function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) {
   const [list, setList] = useState([]); const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLakeOpen, setIsLakeOpen] = useState(false); const [lakeRoom, setLakeRoom] = useState('');
   
@@ -220,12 +179,7 @@ function InfoBoardView({ user, userData }) {
   const [checkedTime, setCheckedTime] = useState(formatTimeStr(getKSTDate()).slice(0,5)); const [isUrgent, setIsUrgent] = useState(false);
 
   const categories = ['🚨단속', '💥사고', '⏳조리지연', '💬기타'];
-  const quickOpts = { 
-    '🚨단속': ['경찰 단속 중', '캠코더 단속 중', '안전모/신호 단속', '함정 단속 조심'], 
-    '💥사고': ['오토바이/차량 사고', '차량 사고 정체', '도로 통제/공사 중', '우회 요망'], 
-    '⏳조리지연': ['10분 이상 지연', '20분 이상 지연', '30분 이상 지연', '콜 빼세요🚨'], 
-    '💬기타': [] 
-  };
+  const quickOpts = { '🚨단속': ['경찰 단속 중', '캠코더 단속 중', '안전모/신호 단속', '함정 단속 조심'], '💥사고': ['오토바이/차량 사고', '차량 사고 정체', '도로 통제/공사 중', '우회 요망'], '⏳조리지연': ['10분 이상 지연', '20분 이상 지연', '30분 이상 지연', '콜 빼세요🚨'], '💬기타': [] };
 
   useEffect(() => {
     const now = getKSTDate(); const resetTime = new Date(now);
@@ -233,6 +187,11 @@ function InfoBoardView({ user, userData }) {
     const q = query(collection(db, 'board'), where('createdAt', '>=', resetTime), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (s) => setList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
+
+  // 💡 메인 뷰에서 팝업 트리거 전달받음
+  useEffect(() => {
+    if (openModalTrigger) { handleOpenModal(); resetModalTrigger(); }
+  }, [openModalTrigger]);
 
   const recentPlaces = useMemo(() => [...new Set(list.filter(item => item.category === category && item.place).map(item => item.place))].slice(0, 5), [list, category]);
 
@@ -250,7 +209,6 @@ function InfoBoardView({ user, userData }) {
   const handleSend = async () => {
     if (category !== '💬기타' && !place.trim()) return alert('위치/매장명을 입력하세요!');
     let finalMsg = category === '💬기타' ? (details || quickStatus) : category === '⏳조리지연' ? `[${place}] ${quickStatus}\n(🕒 확인시간: ${checkedTime})${details ? '\n💬 '+details : ''}` : `[${place}] ${quickStatus}${details ? '\n💬 '+details : ''}`;
-    
     await addDoc(collection(db, 'board'), { category, place, text: finalMsg.trim(), isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: serverTimestamp() });
     
     if (isUrgent) {
@@ -261,8 +219,6 @@ function InfoBoardView({ user, userData }) {
     }
     setIsModalOpen(false);
   };
-
-  const lakeResult = getLakeOneResult(lakeRoom);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500 pb-28">
@@ -290,7 +246,7 @@ function InfoBoardView({ user, userData }) {
              <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Building className="text-indigo-600" size={24}/> 레이크원 B동 찾기</h2><button onClick={() => {setIsLakeOpen(false); setLakeRoom('');}} className="bg-slate-100 text-slate-500 p-2.5 rounded-full"><X size={20}/></button></div>
              <div className="space-y-4">
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner"><label className="text-xs font-black text-slate-500 mb-2 block text-center">B동 도착 호수를 입력하세요</label><input type="text" inputMode="numeric" pattern="[0-9]*" value={lakeRoom} onChange={e=>setLakeRoom(e.target.value.replace(/[^0-9]/g, ''))} placeholder="예: 636" autoFocus className="w-full bg-white p-4 rounded-xl font-black text-4xl text-center outline-none border-2 border-slate-200 focus:border-indigo-500 text-slate-800 tracking-widest shadow-sm transition-all" /></div>
-                {lakeRoom && lakeResult && (<div className={`p-6 rounded-2xl border-2 text-center shadow-lg animate-in zoom-in-95 duration-200 ${lakeResult.type === 'B_CENTER' ? 'bg-blue-600 border-blue-700 text-white' : lakeResult.type === 'B_NORMAL' ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-slate-100 border-slate-300 text-slate-600'}`}><div className="text-[12px] font-black opacity-80 mb-1 uppercase tracking-widest">{lakeRoom}호의 위치는</div><div className="text-2xl font-black tracking-tight">{lakeResult.label}</div></div>)}
+                {lakeRoom && getLakeOneResult(lakeRoom) && (<div className={`p-6 rounded-2xl border-2 text-center shadow-lg animate-in zoom-in-95 duration-200 ${getLakeOneResult(lakeRoom).type === 'B_CENTER' ? 'bg-blue-600 border-blue-700 text-white' : getLakeOneResult(lakeRoom).type === 'B_NORMAL' ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-slate-100 border-slate-300 text-slate-600'}`}><div className="text-[12px] font-black opacity-80 mb-1 uppercase tracking-widest">{lakeRoom}호의 위치는</div><div className="text-2xl font-black tracking-tight">{getLakeOneResult(lakeRoom).label}</div></div>)}
              </div>
           </div>
         </div>
@@ -316,7 +272,7 @@ function InfoBoardView({ user, userData }) {
                   <textarea value={details} onChange={e=>setDetails(e.target.value)} placeholder="추가 내용 (선택)" rows="2" className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400 resize-none mb-3" />
                   <label className="flex items-center gap-2 p-3 bg-rose-50 rounded-xl border border-rose-200 cursor-pointer active:scale-95 transition-transform">
                      <input type="checkbox" checked={isUrgent} onChange={e => setIsUrgent(e.target.checked)} className="w-4 h-4 accent-rose-600" />
-                     <span className="text-[12px] font-black text-rose-700">🚨 실시간 단속/긴급공지로 동시 등록</span>
+                     <span className="text-[12px] font-black text-rose-700">🚨 메인 전광판 긴급공지로 동시 등록</span>
                   </label>
                </div>
                <button onClick={handleSend} disabled={category !== '💬기타' && !place.trim()} className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-base active:scale-95 shadow-lg disabled:opacity-50 transition-transform">제보 완료 🚀</button>
@@ -332,70 +288,44 @@ function InfoBoardView({ user, userData }) {
 // === [4. 서브 뷰: 운행 현황 (StatusView)] ===
 
 function StatusView({ allUsers }) {
-  // 💡 운행중: 라이딩 중이면서 스텔스가 '아닌' 진짜 운행자들만
   const active = allUsers.filter(u => u.isRiding && !u.isStealth);
-  
-  // 💡 스텔스 유저 걸러내기
   const stealthUsers = allUsers.filter(u => u.isRiding && u.isStealth);
-  
-  // 💡 휴식중 (일반 휴식자 + 스텔스 유저 합치기! 철저한 위장)
   const inactiveNormal = allUsers.filter(u => !u.isRiding && !u.isStealth);
   const inactive = [...inactiveNormal, ...stealthUsers];
 
   return (
     <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
-      
-      {/* 🟢 진짜 운행 중 */}
       <div className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm">
         <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
            <span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중 현황</span>
            <span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span>
         </h2>
-        {/* 2열 배치 */}
         <div className="grid grid-cols-2 gap-2.5">
           {active.map(r => (
             <div key={r.uid} className="p-3 rounded-[1rem] border border-green-200 bg-green-50 shadow-sm flex flex-col gap-1 transition-all">
-               <div className="flex items-center gap-1.5">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                  </span>
-                  <span className="text-[11px] font-black text-green-700">🟢 운행중</span>
-               </div>
+               <div className="flex items-center gap-1.5"><span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span></span><span className="text-[11px] font-black text-green-700">🟢 운행중</span></div>
                <div className="text-[13px] font-black text-slate-800 truncate mt-0.5">{r.nickname}</div>
                <div className="text-[10px] font-bold text-slate-500 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div>
             </div>
           ))}
-          {active.length === 0 && (
-             <div className="col-span-2 text-center py-4 text-xs font-bold text-slate-400">현재 운행 중인 멤버가 없습니다.</div>
-          )}
+          {active.length === 0 && <div className="col-span-2 text-center py-4 text-xs font-bold text-slate-400">현재 운행 중인 멤버가 없습니다.</div>}
         </div>
       </div>
-
-      {/* 🟡 휴식 중 (스텔스 유저가 숨어있는 곳) */}
       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 opacity-80 shadow-sm">
         <h2 className="text-xs font-black text-slate-400 mb-4 flex items-center justify-between">
           <span className="flex items-center gap-1.5"><Users size={16}/> 휴식 중</span>
-          {/* 💡 헤더에만 스텔스 존재 여부 알림 ㅋㅋㅋ */}
-          <span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px]">
-             기본 {inactiveNormal.length}명 + 🥷스텔스 {stealthUsers.length}명
-          </span>
+          <span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px]">기본 {inactiveNormal.length}명 + 🥷스텔스 {stealthUsers.length}명</span>
         </h2>
         <div className="grid grid-cols-2 gap-2.5">
           {inactive.map(r => (
             <div key={r.uid} className="p-3 rounded-[1rem] border border-slate-200 bg-slate-50 flex flex-col gap-1">
-               <div className="flex items-center gap-1.5">
-                   <span className="h-2 w-2 rounded-full bg-yellow-400"></span>
-                   {/* 스텔스 유저도 철저하게 휴식중으로 표기 (위장) */}
-                   <span className="text-[11px] font-black text-slate-500">🟡 휴식중</span>
-               </div>
+               <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-yellow-400"></span><span className="text-[11px] font-black text-slate-500">🟡 휴식중</span></div>
                <div className="text-[13px] font-black text-slate-600 truncate mt-0.5">{r.nickname}</div>
                <div className="text-[10px] font-bold text-slate-400 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div>
             </div>
           ))}
         </div>
       </div>
-
     </div>
   );
 }
@@ -421,10 +351,9 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
   );
 }
 
-
 // === [6. 메인 뷰: 배달 수익 관리 (DeliveryView)] ===
 
-function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth, globalNotice }) {
+function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth, globalNotice, onNoticeClick }) {
   const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
   const [deliverySubTab, setDeliverySubTab] = useState('daily');
   const [deliveryDateRange, setDeliveryDateRange] = useState({ start: '', end: '' });
@@ -629,47 +558,15 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
 
   return (
     <div className="flex flex-col gap-2 pb-8 pt-1 animate-in fade-in duration-500 text-slate-800 px-5">
+      <style>{`@keyframes custom-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-custom-scroll { display: flex; width: max-content; animation: custom-scroll 12s linear infinite; }`}</style>
       
-      {/* 💡 전광판의 끊김 없는 무한 롤링을 위한 CSS 추가 */}
-      <style>{`
-        @keyframes custom-scroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-custom-scroll {
-          display: flex;
-          width: max-content;
-          animation: custom-scroll 12s linear infinite;
-        }
-      `}</style>
-
-      {/* 💡 개선된 실시간 긴급 제보 전광판 */}
       <div className="mt-2">
-        <div 
-          onClick={async () => { 
-            const txt = prompt("긴급 공지를 직접 입력하시겠습니까? (새벽 6시 초기화)", displayNotice); 
-            if(txt !== null) await setDoc(doc(db, 'settings', 'globalNotice'), { text: txt.trim(), date: getWorkDateStr() }); 
-          }} 
-          className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 overflow-hidden ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}
-        >
-          <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}>
-             <AlertCircle size={18}/>
-          </div>
-          
+        {/* 💡 전광판 클릭 시 onNoticeClick 호출 ➔ 정보방 팝업 오픈 */}
+        <div onClick={onNoticeClick} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 overflow-hidden ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}>
+          <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}><AlertCircle size={18}/></div>
           <div className={`flex-1 min-w-0 font-black text-[13px] overflow-hidden ${displayNotice ? 'text-rose-600' : 'text-slate-400'}`}>
-            {displayNotice ? (
-               // 💡 여러 개의 span을 달아서 간격 없이 부드럽게 무한 루프되게 만듦
-               <div className="animate-custom-scroll gap-8 pt-0.5">
-                  <span>{displayNotice}</span>
-                  <span>{displayNotice}</span>
-                  <span>{displayNotice}</span>
-                  <span>{displayNotice}</span>
-               </div>
-            ) : (
-               <div className="truncate w-full pt-0.5">{defaultNotice}</div>
-            )}
+            {displayNotice ? ( <div className="animate-custom-scroll gap-8 pt-0.5"><span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span></div> ) : ( <div className="truncate w-full pt-0.5">{defaultNotice}</div> )}
           </div>
-          
           <Edit3 size={14} className="text-slate-300 shrink-0"/>
         </div>
       </div>
@@ -684,7 +581,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          </div>
       )}
 
-      {/* 프리미엄 타이머 카드 */}
       <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-1 ${timerActive ? (userData?.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2.5 ml-1 shrink-0">
@@ -790,40 +686,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         })()}
       </div>
 
-      {isPendingSummaryOpen && (() => {
-        const upcomingToDisplay = upcomingPaydays.slice(0, 2);
-        return (
-            <div className="grid grid-cols-2 gap-2 mb-2 animate-in slide-in-from-top-2">
-              {upcomingToDisplay.length === 0 ? (
-                <div className="col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-slate-200 text-center text-slate-500 text-sm font-black">입금 대기 중인 정산금이 없습니다.</div>
-              ) : (
-                upcomingToDisplay.map((pd, idx) => {
-                  const group = pendingByPayday[pd]; const metrics = getGroupMetrics(group.items);
-                  const baeminTot = group.items.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0);
-                  const coupangTot = group.items.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0);
-
-                  return (
-                    <div key={pd} onClick={() => setSelectedWeeklySummary(pd)} className={`rounded-[2rem] p-5 shadow-lg border bg-gradient-to-br from-teal-700 to-cyan-800 border-teal-600 flex flex-col justify-between cursor-pointer active:scale-95 transition-transform text-white relative overflow-hidden col-span-2`}>
-                      <Bike className="absolute -right-2 -bottom-2 w-32 h-32 opacity-10 rotate-12" fill="white" />
-                      <div className="flex flex-col mb-4 relative z-10">
-                          <div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1"><span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm border ${idx === 0 ? 'bg-white text-teal-700 border-white' : 'bg-teal-600 text-white border-teal-500'}`}>{idx === 0 ? '이번주' : '다음주'}</span><span className="text-teal-50">{pd.slice(5).replace('-','/')} 정산예정</span></div>
-                          <div className="flex justify-between items-end">
-                             <div className={`text-[32px] font-black tracking-tighter leading-none mt-1`}>{formatLargeMoney(group.total)}<span className="text-base font-bold ml-1 opacity-80">원</span></div>
-                             <div className="flex flex-col items-end gap-1.5 text-[10px] font-bold opacity-90 pb-1"><span className="flex gap-2 text-teal-50"><span>총 {formatLargeMoney(metrics.totalCnt)}건</span><span>{metrics.durationStr} 근무</span></span><span className="flex gap-2 text-teal-200"><span>평단 {formatLargeMoney(metrics.perDelivery)}원</span><span>시급 {formatLargeMoney(metrics.hourlyRate)}원</span></span></div>
-                          </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 relative z-10">
-                         <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">기본기기</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.main || 0)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">투폰(서브)</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.sub || 0)}원</span></div></div>
-                         <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#a5f3fc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(baeminTot)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(coupangTot)}원</span></div></div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-        );
-      })()}
-
       <div ref={tabRef} className="flex items-center gap-2 mt-2">
         <div className="flex bg-white p-1 rounded-2xl flex-1 shadow-sm border border-slate-200">
           <button onClick={() => handleSubTabClick('daily')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='daily'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>상세내역</button>
@@ -844,7 +706,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       )}
 
-      {/* 리스트 영역 (Daily/Calendar/Weekly) */}
+      {/* 리스트 영역 */}
       {deliverySubTab === 'calendar' && (() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -932,45 +794,25 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       )}
 
-      {/* 플로팅 플러스 버튼 */}
       <button onClick={() => { 
         const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow;
         if (userData?.trackingStartTime) { const startObj = new Date(userData.trackingStartTime); if (!isNaN(startObj.getTime())) startStr = formatTimeStr(startObj); }
         setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true); 
       }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
 
-      {/* 💡 폼 UI 원래의 아름다운 디자인으로 100% 롤백 완료! 스와이프 닫기도 빼서 화면 먹통 방지 */}
+      {/* 💡 완전히 원래 폼 디자인으로 복구된 배달 마감 모달 */}
       {isDeliveryModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[90] flex items-end justify-center p-0">
           <div className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[90vh] border-t-8 border-blue-500 mt-20 animate-in slide-in-from-bottom duration-300">
             <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 shrink-0"></div>
-            
-            <div className="flex justify-between items-center mb-5 shrink-0">
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                {editingDeliveryShift ? '근무 기록 수정' : splitQueue.length > 0 ? '이전 시간 정산 기록' : '배달 최종 마감'}
-              </h2>
-              <button onClick={handleCloseDeliveryModal} className="bg-white text-slate-500 p-2.5 rounded-full shadow-sm border border-slate-200 hover:bg-slate-50">
-                <X size={18}/>
-              </button>
-            </div>
-            
+            <div className="flex justify-between items-center mb-5 shrink-0"><h2 className="text-xl font-black text-slate-900 tracking-tight">{editingDeliveryShift ? '근무 기록 수정' : splitQueue.length > 0 ? '이전 시간 정산 기록' : '배달 최종 마감'}</h2><button onClick={handleCloseDeliveryModal} className="bg-white text-slate-500 p-2.5 rounded-full shadow-sm border border-slate-200 hover:bg-slate-50"><X size={18}/></button></div>
             <form onSubmit={handleDeliverySubmit} className="space-y-4 overflow-y-auto no-scrollbar pb-2">
               <div className="grid grid-cols-3 gap-2 pb-4 border-b border-slate-200 w-full">
-                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
-                  <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><CalendarIcon size={10} className="text-blue-500"/>날짜</label>
-                  <input type="date" value={deliveryFormData.date} onChange={e=>setDeliveryFormData({...deliveryFormData, date:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
-                </div>
-                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
-                  <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>시작</label>
-                  <input type="time" step="1" value={deliveryFormData.startTime} onChange={e=>setDeliveryFormData({...deliveryFormData, startTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
-                </div>
-                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm">
-                  <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>종료</label>
-                  <input type="time" step="1" value={deliveryFormData.endTime} onChange={e=>setDeliveryFormData({...deliveryFormData, endTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" />
-                </div>
+                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm"><label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><CalendarIcon size={10} className="text-blue-500"/>날짜</label><input type="date" value={deliveryFormData.date} onChange={e=>setDeliveryFormData({...deliveryFormData, date:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" /></div>
+                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm"><label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>시작</label><input type="time" step="1" value={deliveryFormData.startTime} onChange={e=>setDeliveryFormData({...deliveryFormData, startTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" /></div>
+                <div className="bg-white rounded-xl p-2 border border-slate-200 shadow-sm"><label className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mb-0.5 ml-1"><Clock size={10} className="text-blue-500"/>종료</label><input type="time" step="1" value={deliveryFormData.endTime} onChange={e=>setDeliveryFormData({...deliveryFormData, endTime:e.target.value})} className="w-full bg-transparent px-1 h-[24px] font-black text-[13px] outline-none text-slate-800" /></div>
               </div>
 
-              {/* 🛵 배민 입력 폼 */}
               <div className="bg-white p-4 rounded-[1.2rem] shadow-sm border border-slate-200 mt-2">
                 <div className="font-black text-[#1f938f] text-[13px] mb-3 flex items-center gap-1.5"><Bike size={14}/> 배달의민족</div>
                 <div className="space-y-3">
@@ -982,7 +824,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                      </div>
                      <NetDiffInfo device="main" platform="배민" inputAmt={deliveryFormData.mainBaeminAmt} inputCnt={deliveryFormData.mainBaeminCnt} date={deliveryFormData.date} />
                   </div>
-
                   {deliveryFormData.useTwoPhones && (
                     <>
                       <div className="w-full border-t border-slate-100"></div>
@@ -999,7 +840,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 </div>
               </div>
               
-              {/* 🛵 쿠팡 입력 폼 */}
               <div className="bg-slate-900/5 p-4 rounded-[1.2rem] shadow-sm border border-slate-900/10">
                 <div className="font-black text-slate-700 text-[13px] mb-3 flex items-center gap-1.5"><Bike size={14}/> 쿠팡이츠</div>
                 <div className="space-y-3">
@@ -1011,7 +851,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                      </div>
                      <NetDiffInfo device="main" platform="쿠팡" inputAmt={deliveryFormData.mainCoupangAmt} inputCnt={deliveryFormData.mainCoupangCnt} date={deliveryFormData.date} />
                   </div>
-
                   {deliveryFormData.useTwoPhones && (
                     <>
                       <div className="w-full border-t border-slate-200"></div>
@@ -1041,10 +880,24 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
           </div>
         </div>
       )}
-   </div>
+
+      {selectedShiftDetail && (
+         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-[80] p-0">
+            <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl relative border-t-8 border-blue-600">
+               <div className="w-14 h-1.5 bg-slate-300 rounded-full mx-auto mb-6"></div>
+               <h3 className="text-xl font-black mb-4 flex items-center gap-1.5"><Bike size={22} className="text-blue-600"/> 근무 타임 상세</h3>
+               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3 mb-6">
+                 {selectedShiftDetail.items.map(item => (
+                   <div key={item.id} className="flex justify-between items-center"><div className="flex items-center gap-2"><span className="text-[10px] font-black px-2 py-1 rounded bg-slate-800 text-white">{item.platform}</span><span className="font-black">{userData.nickname}</span><span className="text-[11px] text-slate-500">({item.count}건)</span></div><div className="font-black">{formatLargeMoney(item.amount)}원</div></div>
+                 ))}
+               </div>
+               <div className="grid grid-cols-2 gap-3"><button onClick={() => deleteShift(selectedShiftDetail)} className="py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-sm flex items-center justify-center gap-1.5 shadow-sm active:scale-95"><Trash2 size={18}/> 삭제</button><button onClick={() => setSelectedShiftDetail(null)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button></div>
+            </div>
+         </div>
+      )}
+    </div>
   );
 }
-
 
 // === [7. 최상단 앱 및 하단 메뉴 (App)] ===
 
@@ -1058,6 +911,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('delivery'); 
   const [dailyDeliveries, setDailyDeliveries] = useState([]);
   const [globalNotice, setGlobalNotice] = useState(null);
+  
+  // 💡 정보방 팝업 트리거 상태
+  const [triggerInfoModal, setTriggerInfoModal] = useState(false);
   
   const todayStr = getKSTDateStr();
   const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
@@ -1150,8 +1006,21 @@ export default function App() {
 
       <div className="flex-1 overflow-y-auto no-scrollbar relative pb-[120px]">
         <main className="max-w-md mx-auto min-h-full">
-          {activeTab === 'delivery' && <DeliveryView user={user} userData={userData} dailyDeliveries={dailyDeliveries} selectedYear={selectedYear} selectedMonth={selectedMonth} globalNotice={globalNotice} />}
-          {activeTab === 'board' && <InfoBoardView user={user} userData={userData} />}
+          {activeTab === 'delivery' && (
+             <DeliveryView 
+               user={user} userData={userData} dailyDeliveries={dailyDeliveries} 
+               selectedYear={selectedYear} selectedMonth={selectedMonth} globalNotice={globalNotice}
+               // 💡 메인 전광판 클릭 시 정보방으로 이동 + 팝업 트리거
+               onNoticeClick={() => { setActiveTab('board'); setTriggerInfoModal(true); }} 
+             />
+          )}
+          {activeTab === 'board' && (
+             <InfoBoardView 
+               user={user} userData={userData} 
+               openModalTrigger={triggerInfoModal} 
+               resetModalTrigger={() => setTriggerInfoModal(false)} 
+             />
+          )}
           {activeTab === 'maintenance' && <MaintenanceView user={user} />}
           {activeTab === 'status' && <StatusView allUsers={allUsers} />}
           {activeTab === 'settings' && (
