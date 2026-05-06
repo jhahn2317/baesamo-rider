@@ -3,18 +3,18 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 
-// 💡 필수 아이콘 Import
+// 💡 아이콘 Import
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, 
   Trash2, Clock, ChevronDown, ChevronUp, 
   Target, Edit3, X, Timer, Coins, Filter, RefreshCw, 
   ChevronLeft, ChevronRight, Settings, Users, Ghost,
-  CalendarCheck, AlertCircle, ChevronDownSquare, Share,
-  Wrench, MessageSquare, Megaphone, ThumbsUp, Flame
+  CalendarCheck, AlertCircle, Share,
+  Wrench, MessageSquare, Megaphone, ThumbsUp, Flame, MapPin, Store
 } from 'lucide-react';
 
 // ==========================================
-// 1. 배사모 FIREBASE SETUP
+// 1. FIREBASE SETUP
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyCfRI6es38NWQAIGUAxT5Uxx446TE8AG0c",
@@ -29,7 +29,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ==========================================
-// 2. HELPER FUNCTIONS (유틸리티 및 새벽 6시 로직)
+// 2. UTILS (새벽 6시 기준 로직 등)
 // ==========================================
 const getKSTDate = () => {
   const d = new Date();
@@ -41,7 +41,7 @@ const getKSTDateStr = (dateObj = getKSTDate()) => {
   return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
 };
 
-// 💡 라이더용 "근무 일자" 계산 (새벽 6시 이전이면 전날로 처리)
+// 새벽 6시 이전이면 전날로 처리
 const getWorkDateStr = () => {
   const now = getKSTDate();
   if (now.getHours() < 6) {
@@ -50,7 +50,6 @@ const getWorkDateStr = () => {
   return getKSTDateStr(now);
 };
 
-// 초 단위까지 포맷팅 (00:00:00)
 const formatTimeStr = (dateObj) => {
   if (!dateObj || isNaN(dateObj.getTime())) return '00:00:00';
   return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`;
@@ -75,7 +74,7 @@ const getWeekOfMonth = (dateStr) => {
 };
 
 const formatLargeMoney = (v) => {
-  if (v === '' || v === undefined || v === null) return '0';
+  if (!v) return '0';
   const num = typeof v === 'string' ? parseFloat(v.replace(/,/g, '')) : v;
   return isNaN(num) ? '0' : new Intl.NumberFormat('ko-KR').format(num);
 };
@@ -100,8 +99,7 @@ const calcDailyMetrics = (deliveries) => {
       let sh = startParts[0] || 0, sm = startParts[1] || 0;
       let eh = endParts[0] || 0, em = endParts[1] || 0;
       if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
-        let start = sh * 60 + sm;
-        let end = eh * 60 + em;
+        let start = sh * 60 + sm; let end = eh * 60 + em;
         if (end <= start) end += 1440; 
         intervals.push({start, end});
       }
@@ -120,9 +118,7 @@ const calcDailyMetrics = (deliveries) => {
   let totalMins = merged.reduce((acc, curr) => acc + (curr.end - curr.start), 0);
   let totalAmt = deliveries.reduce((acc, curr) => acc + (curr.amount || 0), 0);
   let totalCnt = deliveries.reduce((acc, curr) => acc + (curr.count || 0), 0);
-  
-  let hours = Math.floor(totalMins / 60);
-  let mins = totalMins % 60;
+  let hours = Math.floor(totalMins / 60); let mins = totalMins % 60;
   let durationStr = totalMins > 0 ? `${hours > 0 ? hours+'시간 ' : ''}${mins > 0 ? mins+'분' : ''}`.trim() : '';
   let hourlyRate = totalMins > 0 ? Math.round(totalAmt / (totalMins / 60)) : 0;
   let perDelivery = totalCnt > 0 ? Math.round(totalAmt / totalCnt) : 0;
@@ -158,13 +154,10 @@ const getGroupMetrics = (items) => {
   });
   const totalAmt = items.reduce((acc, curr) => acc + (curr.amount || 0), 0);
   const totalCnt = items.reduce((acc, curr) => acc + (curr.count || 0), 0);
-  let hours = Math.floor(totalMins / 60);
-  let mins = totalMins % 60;
+  let hours = Math.floor(totalMins / 60); let mins = totalMins % 60;
   return { 
     durationStr: totalMins > 0 ? `${hours > 0 ? hours+'시간 ' : ''}${mins > 0 ? mins+'분' : ''}`.trim() : '-', 
-    totalCnt, totalAmt, 
-    perDelivery: totalCnt > 0 ? Math.round(totalAmt / totalCnt) : 0, 
-    hourlyRate: totalMins > 0 ? Math.round(totalAmt / (totalMins / 60)) : 0 
+    totalCnt, totalAmt, perDelivery: totalCnt > 0 ? Math.round(totalAmt / totalCnt) : 0, hourlyRate: totalMins > 0 ? Math.round(totalAmt / (totalMins / 60)) : 0 
   };
 };
 
@@ -180,7 +173,6 @@ export const handleTouchEnd = (e, closeFunction) => {
   const currentY = e.changedTouches[0].clientY;
   const swipeDistance = currentY - startY;
   const modalHeight = e.currentTarget.clientHeight;
-
   e.currentTarget.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
   if (swipeDistance > modalHeight * 0.35) {
     e.currentTarget.style.transform = 'translateY(100%)';
@@ -192,7 +184,7 @@ export const handleTouchEnd = (e, closeFunction) => {
 };
 
 // ==========================================
-// 3. 서브 뷰 (정비, 실시간 게시판)
+// 3. 서브 뷰 (정비, 실시간 게시판, 현황)
 // ==========================================
 
 // --- [정비 관리 뷰] ---
@@ -211,11 +203,8 @@ function MaintenanceView({ user }) {
   const handleSave = async () => {
     if (!formData.item || !formData.cost) return alert("내용을 입력하세요.");
     await addDoc(collection(db, 'maintenance'), { 
-      ...formData, 
-      userId: user.uid, 
-      cost: parseInt(formData.cost.replace(/,/g, '')),
-      mileage: parseInt(formData.mileage.replace(/,/g, '') || 0),
-      createdAt: serverTimestamp() 
+      ...formData, userId: user.uid, cost: parseInt(formData.cost.replace(/,/g, '')),
+      mileage: parseInt(formData.mileage.replace(/,/g, '') || 0), createdAt: serverTimestamp() 
     });
     setModalOpen(false); setStep(1); setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
   };
@@ -234,7 +223,8 @@ function MaintenanceView({ user }) {
           </div>
         ))}
       </div>
-      <button onClick={() => setModalOpen(true)} className="fixed bottom-24 right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-[0_0_15px_rgba(30,41,59,0.5)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
+      <button onClick={() => setModalOpen(true)} className="fixed bottom-28 right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-[0_0_15px_rgba(30,41,59,0.5)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Plus size={28}/></button>
+      
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-10 animate-in slide-in-from-bottom duration-300 border-t-8 border-slate-800">
@@ -270,58 +260,203 @@ function MaintenanceView({ user }) {
   );
 }
 
-// --- [실시간 정보 공지방 (새벽 6시 초기화)] ---
+// --- [실시간 정보 공지방 (입력 팝업 및 자동완성 적용)] ---
 function InfoBoardView({ user, userData }) {
-  const [msg, setMsg] = useState('');
-  const [isUrgent, setIsUrgent] = useState(false);
   const [list, setList] = useState([]);
-  const tags = ['🚨단속/사고', '🚧도로통제', '⏳조리지연', '🍔꿀콜공유', '💬잡담'];
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // 폼 상태 관리
+  const [category, setCategory] = useState('🚨단속/사고');
+  const [place, setPlace] = useState('');
+  const [quickStatus, setQuickStatus] = useState('');
+  const [details, setDetails] = useState('');
+  const [checkedTime, setCheckedTime] = useState(formatTimeStr(getKSTDate()).slice(0,5));
+  const [isUrgent, setIsUrgent] = useState(false);
+
+  const categories = ['🚨단속/사고', '🚧도로통제', '⏳조리지연', '💬기타'];
+  const quickOpts = {
+    '🚨단속/사고': ['캠코더 단속 중', '경찰 단속 중', '오토바이 사고', '차량 사고 정체'],
+    '🚧도로통제': ['도로 공사 중', '차선 막힘', '완전 통제', '우회 요망'],
+    '⏳조리지연': ['10분 이상 지연', '20분 이상 지연', '30분 이상 지연', '콜 빼세요🚨'],
+    '💬기타': []
+  };
 
   useEffect(() => {
-    // 💡 새벽 6시 이후의 글만 실시간 감시
     const now = getKSTDate();
     const resetTime = new Date(now);
     if (now.getHours() < 6) resetTime.setDate(now.getDate() - 1);
     resetTime.setHours(6, 0, 0, 0);
-
     const q = query(collection(db, 'board'), where('createdAt', '>=', resetTime), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (s) => setList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
 
+  // 최근 입력값 자동완성 추천 (카테고리별로 장소 추출)
+  const recentPlaces = useMemo(() => {
+    const places = list.filter(item => item.category === category && item.place).map(item => item.place);
+    return [...new Set(places)].slice(0, 5);
+  }, [list, category]);
+
+  const handleOpenModal = () => {
+    setCategory('🚨단속/사고'); setPlace(''); setQuickStatus(''); setDetails(''); 
+    setCheckedTime(formatTimeStr(getKSTDate()).slice(0,5)); setIsUrgent(false);
+    setIsModalOpen(true);
+  };
+
   const handleSend = async () => {
-    if (!msg.trim()) return;
-    await addDoc(collection(db, 'board'), { text: msg.trim(), isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: new Date() });
-    setMsg(''); setIsUrgent(false);
+    if (category !== '💬기타' && !place.trim()) return alert('위치/매장명을 입력하세요!');
+    
+    let finalMsg = '';
+    if (category === '💬기타') {
+        finalMsg = details || quickStatus;
+    } else if (category === '⏳조리지연') {
+        finalMsg = `[${place}] ${quickStatus}\n(🕒 확인시간: ${checkedTime})${details ? '\n💬 '+details : ''}`;
+    } else {
+        finalMsg = `[${place}] ${quickStatus}${details ? '\n💬 '+details : ''}`;
+    }
+
+    await addDoc(collection(db, 'board'), { 
+      category, place, text: finalMsg.trim(), isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: serverTimestamp() 
+    });
+    setIsModalOpen(false);
   };
 
   const sortedList = [...list].sort((a,b) => (b.isUrgent ? 1 : 0) - (a.isUrgent ? 1 : 0));
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500">
-      <div className="flex-1 overflow-y-auto p-5 space-y-3 no-scrollbar pb-28">
-        {sortedList.length === 0 && <div className="py-20 text-center text-slate-300 font-bold text-sm">새벽 6시 이후 등록된 실시간 정보가 없습니다.</div>}
+    <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500 pb-28">
+      <div className="p-5 space-y-3">
+        {sortedList.length === 0 && <div className="py-20 text-center text-slate-400 font-bold text-sm bg-white rounded-2xl border border-dashed border-slate-200">새벽 6시 이후 등록된 실시간 정보가 없습니다.</div>}
         {sortedList.map(item => (
           <div key={item.id} className={`p-4 rounded-2xl shadow-sm border transition-all ${item.isUrgent ? 'bg-rose-50 border-rose-200 ring-2 ring-rose-100' : 'bg-white border-slate-100'}`}>
             <div className="flex justify-between items-start mb-2">
-              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${item.isUrgent ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>{item.isUrgent ? '📌 중요공지' : item.nickname}</span>
-              <span className="text-[9px] font-bold text-slate-400">{item.createdAt?.toDate ? formatTimeStr(item.createdAt.toDate()) : ''}</span>
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${item.isUrgent ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                {item.isUrgent && <Megaphone size={10}/>} {item.isUrgent ? '중요 공지' : item.category.slice(0,1) + ' ' + item.nickname}
+              </span>
+              <span className="text-[9px] font-bold text-slate-400">{item.createdAt?.toDate ? formatTimeStr(item.createdAt.toDate()).slice(0,5) : ''}</span>
             </div>
-            <p className={`text-[14px] font-bold leading-relaxed ${item.isUrgent ? 'text-rose-700' : 'text-slate-700'}`}>{item.text}</p>
+            <p className={`text-[14px] font-bold leading-relaxed whitespace-pre-wrap ${item.isUrgent ? 'text-rose-700' : 'text-slate-700'}`}>{item.text}</p>
             <div className="mt-3 flex gap-2">
-              <button onClick={() => updateDoc(doc(db, 'board', item.id), { likes: (item.likes || 0) + 1 })} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 flex items-center gap-1 active:scale-90"><ThumbsUp size={12}/> 확인요 {item.likes > 0 && item.likes}</button>
-              {item.userId === user.uid && <button onClick={() => deleteDoc(doc(db, 'board', item.id))} className="text-slate-300 ml-auto"><Trash2 size={12}/></button>}
+              <button onClick={() => updateDoc(doc(db, 'board', item.id), { likes: (item.likes || 0) + 1 })} className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 flex items-center gap-1 active:scale-95"><ThumbsUp size={12}/> 확인완료 {item.likes > 0 && <span className="text-blue-500">{item.likes}</span>}</button>
+              {item.userId === user.uid && <button onClick={() => deleteDoc(doc(db, 'board', item.id))} className="text-slate-300 ml-auto p-1 active:scale-95"><Trash2 size={14}/></button>}
             </div>
           </div>
         ))}
       </div>
-      <div className="fixed bottom-[72px] left-0 right-0 p-4 bg-white border-t border-slate-200 space-y-3 shadow-[0_-10px_20px_rgba(0,0,0,0.03)] z-30">
-        <div className="flex overflow-x-auto gap-2 no-scrollbar max-w-md mx-auto">
-          {tags.map(t => <button key={t} onClick={() => setMsg(prev => `${t} ${prev}`)} className="whitespace-nowrap px-3 py-1.5 bg-slate-50 rounded-full text-[10px] font-black text-slate-500 border border-slate-100 active:bg-slate-800 active:text-white transition-colors">{t}</button>)}
+
+      <button onClick={handleOpenModal} className="fixed bottom-28 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center z-40 active:scale-90 transition-transform"><Edit3 size={24}/></button>
+
+      {/* 실시간 톡방 팝업 모달 */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
+          <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => setIsModalOpen(false))} className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl animate-in slide-in-from-bottom duration-300 mt-10 border-t-8 border-blue-500 flex flex-col max-h-[95vh]">
+            <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 shrink-0"></div>
+            <div className="flex justify-between items-center mb-4 shrink-0">
+              <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-1.5"><Megaphone size={18} className="text-blue-500"/> 실시간 현장 제보</h2>
+              <button onClick={() => setIsModalOpen(false)} className="bg-white text-slate-500 p-2 rounded-full shadow-sm border border-slate-200"><X size={18}/></button>
+            </div>
+            
+            <div className="overflow-y-auto no-scrollbar space-y-4 pb-2">
+               {/* 1. 카테고리 선택 */}
+               <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                 {categories.map(cat => (
+                    <button key={cat} type="button" onClick={() => {setCategory(cat); setQuickStatus(''); setPlace('');}} className={`px-3 py-2 rounded-xl text-[11px] font-black shrink-0 transition-colors ${category === cat ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                      {cat}
+                    </button>
+                 ))}
+               </div>
+
+               {/* 2. 입력 폼 동적 렌더링 */}
+               {category !== '💬기타' && (
+                  <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                     <div>
+                        <label className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1">{category === '⏳조리지연' ? <Store size={12}/> : <MapPin size={12}/>} {category === '⏳조리지연' ? '매장명' : '발생 위치'}</label>
+                        <input type="text" value={place} onChange={e=>setPlace(e.target.value)} placeholder={category === '⏳조리지연' ? '예: 교촌치킨 동탄역점' : '예: 동탄역 사거리'} className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400" />
+                        
+                        {/* 💡 자동완성 추천 영역 */}
+                        {recentPlaces.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                             {recentPlaces.map(rp => (
+                               <button key={rp} type="button" onClick={() => setPlace(rp)} className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black border border-blue-100 active:scale-95">#{rp}</button>
+                             ))}
+                          </div>
+                        )}
+                     </div>
+
+                     {/* 조리지연 시 확인 시간 폼 추가 */}
+                     {category === '⏳조리지연' && (
+                        <div>
+                           <label className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1"><Clock size={12}/> 대기 확인 시간</label>
+                           <input type="time" value={checkedTime} onChange={e=>setCheckedTime(e.target.value)} className="w-full bg-slate-50 p-3 rounded-xl font-black text-sm outline-none border border-slate-100 focus:border-blue-400" />
+                        </div>
+                     )}
+
+                     <div>
+                        <label className="text-[10px] font-bold text-slate-500 mb-1 block">현재 상황 (빠른 선택)</label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                           {quickOpts[category].map(opt => (
+                              <button key={opt} type="button" onClick={() => setQuickStatus(opt)} className={`p-2 rounded-xl text-[11px] font-black transition-colors ${quickStatus === opt ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 border border-slate-100'}`}>{opt}</button>
+                           ))}
+                        </div>
+                     </div>
+                  </div>
+               )}
+
+               {/* 3. 상세 내용 및 중요 공지 체크 */}
+               <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                  <textarea value={details} onChange={e=>setDetails(e.target.value)} placeholder="추가 상세 내용 (선택)" rows="2" className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400 resize-none mb-3" />
+                  
+                  {/* 방장 권한으로 상단 고정 */}
+                  {userData?.status === 'admin' && (
+                     <label className="flex items-center gap-2 p-3 bg-rose-50 rounded-xl border border-rose-100 cursor-pointer active:scale-95 transition-transform">
+                        <input type="checkbox" checked={isUrgent} onChange={e => setIsUrgent(e.target.checked)} className="w-4 h-4 accent-rose-500" />
+                        <span className="text-[11px] font-black text-rose-700">📌 모두가 볼 수 있게 상단에 고정하기</span>
+                     </label>
+                  )}
+               </div>
+
+               <button onClick={handleSend} disabled={!quickStatus && !details && !place} className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-base active:scale-95 shadow-lg transition-transform disabled:opacity-50">제보 완료하기 🚀</button>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2 items-center max-w-md mx-auto">
-          <button onClick={() => setIsUrgent(!isUrgent)} className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all ${isUrgent ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}><Megaphone size={18} /></button>
-          <input value={msg} onChange={e=>setMsg(e.target.value)} placeholder="실시간 도로 정보를 공유하세요" className="flex-1 bg-slate-50 p-3 h-11 rounded-xl text-sm font-bold outline-none border border-slate-100 focus:border-blue-400 focus:bg-white transition-all" />
-          <button onClick={handleSend} className="bg-blue-600 text-white h-11 px-4 rounded-xl font-black text-sm active:scale-95 transition-transform shadow-md shrink-0">전송</button>
+      )}
+    </div>
+  );
+}
+
+// --- [운행 현황 뷰] ---
+function StatusView({ allUsers }) {
+  const active = allUsers.filter(u => u.isRiding && !u.isStealth);
+  const inactive = allUsers.filter(u => !u.isRiding || u.isStealth);
+  return (
+    <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
+      <div className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm">
+        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
+           <span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중</span>
+           <span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span>
+        </h2>
+        <div className="space-y-2">
+          {active.map(r => (
+            <div key={r.uid} className="flex justify-between items-center bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
+               <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-black">{r.nickname.slice(0,1)}</div>
+                  <div className="font-black text-slate-800">{r.nickname} <span className="text-blue-500 text-xs">({r.bikeNumber?.slice(-4)})</span></div>
+               </div>
+               <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-full border border-blue-100 shadow-sm animate-pulse">
+                  <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span><span className="text-[10px] font-black text-rose-500">On</span>
+               </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="bg-white p-5 rounded-[2rem] border border-slate-100 opacity-60 shadow-sm">
+        <h2 className="text-xs font-black text-slate-400 mb-3 flex items-center gap-1.5"><Users size={16}/> 휴식/스텔스 ({inactive.length}명)</h2>
+        <div className="grid grid-cols-2 gap-2">
+          {inactive.map(r => (
+            <div key={r.uid} className="bg-slate-50 p-3 rounded-xl flex items-center gap-2 border border-slate-100">
+               <div className="w-6 h-6 bg-slate-300 text-white rounded-full flex items-center justify-center text-[10px]">{r.nickname.slice(0,1)}</div>
+               <span className="text-xs font-bold text-slate-500 truncate">{r.nickname}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -1442,6 +1577,27 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
           );
       })()}
 
+      <button onClick={() => { 
+        const now = getKSTDate();
+        const timeNow = formatTimeStr(now);
+        let startStr = timeNow;
+        if (userData?.trackingStartTime) {
+            const startObj = new Date(userData.trackingStartTime);
+            if (!isNaN(startObj.getTime())) {
+                startStr = formatTimeStr(startObj);
+            }
+        }
+        
+        setEditingDeliveryShift(null);
+        setDeliveryFormData({ 
+          ...emptyForm, 
+          date: getWorkDateStr(),
+          startTime: startStr,
+          endTime: timeNow
+        });
+        setIsDeliveryModalOpen(true); 
+      }} className="fixed bottom-28 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
+
       {/* 심폐소생술 마감 취소 모달 */}
       {showCloseConfirm && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in">
@@ -1473,7 +1629,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
           </div>
       )}
 
-      {/* 마감 폼 모달 (UI 다이어트 & 00:00:00 지원) */}
+      {/* 마감 폼 모달 */}
       {isDeliveryModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end justify-center z-[90] p-0 overflow-y-auto no-scrollbar">
           <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, handleCloseDeliveryModal)} className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl animate-in slide-in-from-bottom duration-300 mt-20 border-t-8 border-blue-500 flex flex-col max-h-[90vh]">
@@ -1558,48 +1714,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ==========================================
-// 5. 운행 현황 뷰 (실시간)
-// ==========================================
-function StatusView({ allUsers }) {
-  const active = allUsers.filter(u => u.isRiding && !u.isStealth);
-  const inactive = allUsers.filter(u => !u.isRiding || u.isStealth);
-  return (
-    <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
-      <div className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm">
-        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
-           <span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중</span>
-           <span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span>
-        </h2>
-        <div className="space-y-2">
-          {active.map(r => (
-            <div key={r.uid} className="flex justify-between items-center bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
-               <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-black">{r.nickname.slice(0,1)}</div>
-                  <div className="font-black text-slate-800">{r.nickname} <span className="text-blue-500 text-xs">({r.bikeNumber?.slice(-4)})</span></div>
-               </div>
-               <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-full border border-blue-100 shadow-sm animate-pulse">
-                  <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span><span className="text-[10px] font-black text-rose-500">On</span>
-               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="bg-white p-5 rounded-[2rem] border border-slate-100 opacity-60 shadow-sm">
-        <h2 className="text-xs font-black text-slate-400 mb-3 flex items-center gap-1.5"><Users size={16}/> 휴식/스텔스 ({inactive.length}명)</h2>
-        <div className="grid grid-cols-2 gap-2">
-          {inactive.map(r => (
-            <div key={r.uid} className="bg-slate-50 p-3 rounded-xl flex items-center gap-2 border border-slate-100">
-               <div className="w-6 h-6 bg-slate-300 text-white rounded-full flex items-center justify-center text-[10px]">{r.nickname.slice(0,1)}</div>
-               <span className="text-xs font-bold text-slate-500 truncate">{r.nickname}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
