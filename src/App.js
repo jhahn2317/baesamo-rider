@@ -109,14 +109,26 @@ export const handleTouchEnd = (e, closeFunction) => {
 // === [2. 서브 뷰: 정비 관리 (MaintenanceView)] ===
 
 function MaintenanceView({ user }) {
-  const [list, setAllList] = useState([]); const [modalOpen, setModalOpen] = useState(false); const [step, setStep] = useState(1);
+  const [list, setAllList] = useState([]); 
+  const [modalOpen, setModalOpen] = useState(false); 
+  const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
+  
+  // 💡 필터 상태 관리 추가
+  const [selectedFilter, setSelectedFilter] = useState('전체');
+  const filters = ['전체', '오일', '패드', '타이어', '기타'];
+
   const items = ['엔진오일', '앞브레이크패드', '뒷브레이크패드', '벨트', '앞타이어', '뒷타이어', '배터리', '미션오일', '점화플러그'];
 
   useEffect(() => {
     if (!user?.uid) return;
     const q = query(collection(db, 'maintenance'), where('userId', '==', user.uid));
-    return onSnapshot(q, (s) => { const data = s.docs.map(d => ({ id: d.id, ...d.data() })); data.sort((a, b) => new Date(b.date) - new Date(a.date)); setAllList(data); });
+    return onSnapshot(q, (s) => { 
+      const data = s.docs.map(d => ({ id: d.id, ...d.data() })); 
+      // 최신 날짜순 정렬 (최신이 맨 위로)
+      data.sort((a, b) => new Date(b.date) - new Date(a.date)); 
+      setAllList(data); 
+    });
   }, [user.uid]);
 
   const handleSave = async () => {
@@ -130,22 +142,70 @@ function MaintenanceView({ user }) {
     } catch (error) { alert(`[저장 실패] ${error.message}`); }
   };
 
+  // 💡 선택된 필터에 따라 리스트 걸러내기 로직
+  const filteredList = useMemo(() => {
+    if (selectedFilter === '전체') return list;
+    return list.filter(m => {
+      if (selectedFilter === '오일') return m.item.includes('오일');
+      if (selectedFilter === '패드') return m.item.includes('패드');
+      if (selectedFilter === '타이어') return m.item.includes('타이어');
+      if (selectedFilter === '기타') return !m.item.includes('오일') && !m.item.includes('패드') && !m.item.includes('타이어');
+      return true;
+    });
+  }, [list, selectedFilter]);
+
   return (
-    <div className="p-5 space-y-4 animate-in fade-in duration-500 pb-28">
-      <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
-        <div><h3 className="text-sm font-black text-slate-400 mb-1">총 정비 지출</h3><p className="text-2xl font-black text-slate-800">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p></div>
-        <Wrench size={32} className="text-blue-100" />
+    <div className="p-5 space-y-3 animate-in fade-in duration-500 pb-28">
+      
+      {/* 총 지출 요약 박스 */}
+      <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex justify-between items-center">
+        <div>
+          <h3 className="text-[11px] font-black text-slate-400 mb-0.5 tracking-tight">총 정비 지출</h3>
+          <p className="text-2xl font-black text-slate-800 tracking-tighter leading-none">{formatLargeMoney(list.reduce((a,b)=>a+(b.cost||0),0))}원</p>
+        </div>
+        <Wrench size={28} className="text-blue-100" />
       </div>
-      <div className="space-y-3">
-        {list.length === 0 ? <div className="text-center py-20 bg-white rounded-[2rem] border border-dashed border-slate-200"><Wrench className="mx-auto text-slate-200 mb-2" size={40}/><p className="text-slate-400 font-bold text-sm">등록된 정비 내역이 없습니다.</p></div>
-        : list.map(m => (
-          <div key={m.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm">
-            <div><p className="text-[10px] font-bold text-slate-400">{m.date}</p><p className="font-black text-slate-800">{m.item}</p>{m.mileage > 0 && <p className="text-[10px] text-blue-500 font-bold italic">{formatLargeMoney(m.mileage)}km에 교체</p>}</div>
-            <div className="text-right"><p className="font-black text-blue-600">{formatLargeMoney(m.cost)}원</p><button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-200 mt-1 active:scale-95"><Trash2 size={14}/></button></div>
-          </div>
+
+      {/* 💡 빠른 필터링 탭 (가로 스크롤) */}
+      <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
+        {filters.map(f => (
+          <button 
+            key={f} 
+            onClick={() => setSelectedFilter(f)} 
+            className={`px-3.5 py-1.5 rounded-full text-[11px] font-black shrink-0 transition-all shadow-sm ${selectedFilter === f ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+          >
+            {f}
+          </button>
         ))}
       </div>
+
+      {/* 정비 내역 리스트 (💡 박스 크기 다이어트 완료) */}
+      <div className="space-y-2">
+        {filteredList.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-[1.5rem] border border-dashed border-slate-200">
+             <Wrench className="mx-auto text-slate-200 mb-2" size={32}/>
+             <p className="text-slate-400 font-bold text-xs">해당하는 정비 내역이 없습니다.</p>
+          </div>
+        ) : (
+          filteredList.map(m => (
+            <div key={m.id} className="bg-white px-4 py-3 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm active:scale-95 transition-transform">
+              <div className="flex flex-col">
+                <p className="text-[9px] font-bold text-slate-400 mb-0.5">{m.date}</p>
+                <p className="font-black text-slate-800 text-[13px] leading-none">{m.item}</p>
+                {m.mileage > 0 && <p className="text-[9px] text-blue-500 font-bold italic mt-1">{formatLargeMoney(m.mileage)}km 교체</p>}
+              </div>
+              <div className="flex flex-col items-end">
+                <p className="font-black text-blue-600 text-[14px] leading-none">{formatLargeMoney(m.cost)}원</p>
+                <button onClick={() => deleteDoc(doc(db, 'maintenance', m.id))} className="text-slate-300 mt-1.5 active:scale-90 p-1 -mr-1"><Trash2 size={12}/></button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
       <button onClick={() => setModalOpen(true)} className="fixed bottom-[110px] right-6 w-14 h-14 bg-slate-800 text-white rounded-full shadow-lg flex items-center justify-center z-40 active:scale-95 transition-all"><Plus size={28}/></button>
+      
+      {/* 추가 모달 (기존 유지) */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-10 animate-in slide-in-from-bottom duration-300 border-t-8 border-slate-800">
@@ -163,14 +223,27 @@ function MaintenanceView({ user }) {
 // === [3. 서브 뷰: 실시간 정보방 (InfoBoardView)] ===
 
 function InfoBoardView({ user, userData }) {
-  const [list, setList] = useState([]); const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLakeOpen, setIsLakeOpen] = useState(false); const [lakeRoom, setLakeRoom] = useState('');
-  const [category, setCategory] = useState('🚨단속/사고'); const [place, setPlace] = useState('');
-  const [quickStatus, setQuickStatus] = useState(''); const [details, setDetails] = useState('');
-  const [checkedTime, setCheckedTime] = useState(formatTimeStr(getKSTDate()).slice(0,5)); const [isUrgent, setIsUrgent] = useState(false);
+  const [list, setList] = useState([]); 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLakeOpen, setIsLakeOpen] = useState(false); 
+  const [lakeRoom, setLakeRoom] = useState('');
+  
+  const [category, setCategory] = useState('🚨단속/사고'); 
+  const [place, setPlace] = useState('');
+  const [quickStatus, setQuickStatus] = useState(''); 
+  const [details, setDetails] = useState('');
+  const [checkedTime, setCheckedTime] = useState(formatTimeStr(getKSTDate()).slice(0,5)); 
+  
+  // 💡 상단 고정 핀 ➔ 전광판 동시 등록 스위치로 변경
+  const [isUrgent, setIsUrgent] = useState(false);
 
   const categories = ['🚨단속/사고', '🚧도로통제', '⏳조리지연', '💬기타'];
-  const quickOpts = { '🚨단속/사고': ['캠코더 단속 중', '경찰 단속 중', '오토바이 사고', '차량 사고 정체'], '🚧도로통제': ['도로 공사 중', '차선 막힘', '완전 통제', '우회 요망'], '⏳조리지연': ['10분 이상 지연', '20분 이상 지연', '30분 이상 지연', '콜 빼세요🚨'], '💬기타': [] };
+  const quickOpts = { 
+    '🚨단속/사고': ['캠코더 단속 중', '경찰 단속 중', '오토바이 사고', '차량 사고 정체'], 
+    '🚧도로통제': ['도로 공사 중', '차선 막힘', '완전 통제', '우회 요망'], 
+    '⏳조리지연': ['10분 이상 지연', '20분 이상 지연', '30분 이상 지연', '콜 빼세요🚨'], 
+    '💬기타': [] 
+  };
 
   useEffect(() => {
     const now = getKSTDate(); const resetTime = new Date(now);
@@ -191,10 +264,25 @@ function InfoBoardView({ user, userData }) {
   };
 
   const handleOpenModal = () => { setCategory('🚨단속/사고'); setPlace(''); setQuickStatus(''); setDetails(''); setCheckedTime(formatTimeStr(getKSTDate()).slice(0,5)); setIsUrgent(false); setIsModalOpen(true); };
+  
+  // 💡 정보방 + 메인 전광판 동시 전송 로직
   const handleSend = async () => {
     if (category !== '💬기타' && !place.trim()) return alert('위치/매장명을 입력하세요!');
+    
     let finalMsg = category === '💬기타' ? (details || quickStatus) : category === '⏳조리지연' ? `[${place}] ${quickStatus}\n(🕒 확인시간: ${checkedTime})${details ? '\n💬 '+details : ''}` : `[${place}] ${quickStatus}${details ? '\n💬 '+details : ''}`;
-    await addDoc(collection(db, 'board'), { category, place, text: finalMsg.trim(), isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: serverTimestamp() });
+    const textToSave = finalMsg.trim();
+
+    // 1. 정보방(board) 컬렉션에 저장
+    await addDoc(collection(db, 'board'), { category, place, text: textToSave, isUrgent, nickname: userData.nickname, userId: user.uid, likes: 0, createdAt: serverTimestamp() });
+    
+    // 2. 동시 등록(isUrgent) 체크 시, 메인 전광판(globalNotice)에도 즉시 꽂아줌
+    if (isUrgent) {
+      await setDoc(doc(db, 'settings', 'globalNotice'), { 
+        text: `🚨 [${category.slice(1)}] ${textToSave.split('\n')[0]} (제보: ${userData.nickname})`, 
+        date: getWorkDateStr() 
+      });
+    }
+
     setIsModalOpen(false);
   };
 
@@ -210,15 +298,16 @@ function InfoBoardView({ user, userData }) {
       <div className="p-5 space-y-3">
         {list.length === 0 && <div className="py-20 text-center text-slate-400 font-bold text-sm bg-white rounded-2xl border border-dashed border-slate-200">등록된 실시간 정보가 없습니다.</div>}
         {[...list].sort((a,b)=>(b.isUrgent?1:0)-(a.isUrgent?1:0)).map(item => (
-          <div key={item.id} className={`p-4 rounded-2xl shadow-sm border ${item.isUrgent ? 'bg-rose-50 border-rose-200 ring-2 ring-rose-100' : 'bg-white border-slate-100'}`}>
-            <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${item.isUrgent ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>{item.isUrgent && <Megaphone size={10}/>} {item.isUrgent ? '중요 공지' : item.category?.slice(0,1) + ' ' + item.nickname}</span><span className="text-[9px] font-bold text-slate-400">{item.createdAt?.toDate ? formatTimeStr(item.createdAt.toDate()).slice(0,5) : ''}</span></div>
+          <div key={item.id} className={`p-4 rounded-2xl shadow-sm border transition-all ${item.isUrgent ? 'bg-rose-50 border-rose-200 ring-2 ring-rose-100' : 'bg-white border-slate-100'}`}>
+            <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${item.isUrgent ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>{item.isUrgent && <Megaphone size={10}/>} {item.isUrgent ? '긴급공지' : item.category?.slice(0,1) + ' ' + item.nickname}</span><span className="text-[9px] font-bold text-slate-400">{item.createdAt?.toDate ? formatTimeStr(item.createdAt.toDate()).slice(0,5) : ''}</span></div>
             <p className={`text-[14px] font-bold leading-relaxed whitespace-pre-wrap ${item.isUrgent ? 'text-rose-700' : 'text-slate-700'}`}>{item.text}</p>
-            <div className="mt-3 flex gap-2"><button onClick={() => updateDoc(doc(db, 'board', item.id), { likes: (item.likes || 0) + 1 })} className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 flex items-center gap-1"><ThumbsUp size={12}/> 확인완료 {item.likes > 0 && <span className="text-blue-500">{item.likes}</span>}</button>{item.userId === user.uid && <button onClick={() => deleteDoc(doc(db, 'board', item.id))} className="text-slate-300 ml-auto p-1"><Trash2 size={14}/></button>}</div>
+            <div className="mt-3 flex gap-2"><button onClick={() => updateDoc(doc(db, 'board', item.id), { likes: (item.likes || 0) + 1 })} className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 flex items-center gap-1 active:scale-95"><ThumbsUp size={12}/> 확인완료 {item.likes > 0 && <span className="text-blue-500">{item.likes}</span>}</button>{item.userId === user.uid && <button onClick={() => deleteDoc(doc(db, 'board', item.id))} className="text-slate-300 ml-auto p-1 active:scale-90"><Trash2 size={14}/></button>}</div>
           </div>
         ))}
       </div>
       <button onClick={handleOpenModal} className="fixed bottom-[110px] right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center z-40 active:scale-90"><Edit3 size={24}/></button>
 
+      {/* 레이크원 모달 */}
       {isLakeOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[110] flex items-end justify-center p-0">
           <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => {setIsLakeOpen(false); setLakeRoom('');})} className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-12 shadow-2xl flex flex-col border-t-8 border-indigo-600">
@@ -232,6 +321,7 @@ function InfoBoardView({ user, userData }) {
         </div>
       )}
 
+      {/* 정보방 글쓰기 팝업 모달 */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
           <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => setIsModalOpen(false))} className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[95vh] border-t-8 border-blue-500 mt-10">
@@ -250,7 +340,12 @@ function InfoBoardView({ user, userData }) {
                )}
                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                   <textarea value={details} onChange={e=>setDetails(e.target.value)} placeholder="추가 내용 (선택)" rows="2" className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400 resize-none mb-3" />
-                  {userData?.status === 'admin' && (<label className="flex items-center gap-2 p-3 bg-rose-50 rounded-xl border border-rose-100 cursor-pointer"><input type="checkbox" checked={isUrgent} onChange={e => setIsUrgent(e.target.checked)} className="w-4 h-4 accent-rose-500" /><span className="text-[11px] font-black text-rose-700">📌 상단 고정하기</span></label>)}
+                  
+                  {/* 💡 누구나 체크 가능한 '전광판 동시 등록' 체크박스 */}
+                  <label className="flex items-center gap-2 p-3 bg-rose-50 rounded-xl border border-rose-200 cursor-pointer active:scale-95 transition-transform">
+                     <input type="checkbox" checked={isUrgent} onChange={e => setIsUrgent(e.target.checked)} className="w-4 h-4 accent-rose-600" />
+                     <span className="text-[12px] font-black text-rose-700">🚨 실시간 단속/긴급공지로 동시 등록</span>
+                  </label>
                </div>
                <button onClick={handleSend} disabled={category !== '💬기타' && !place.trim()} className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-base active:scale-95 shadow-lg disabled:opacity-50">제보 완료 🚀</button>
             </div>
@@ -264,18 +359,59 @@ function InfoBoardView({ user, userData }) {
 // === [4. 서브 뷰: 운행 현황 (StatusView)] ===
 
 function StatusView({ allUsers }) {
-  const active = allUsers.filter(u => u.isRiding && !u.isStealth);
-  const inactive = allUsers.filter(u => !u.isRiding || u.isStealth);
+  // 💡 스텔스 유저도 '운행 중(active)' 배열에 포함시킵니다.
+  const active = allUsers.filter(u => u.isRiding);
+  const inactive = allUsers.filter(u => !u.isRiding);
+
   return (
     <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
+      
+      {/* 🟢 운행 중 (스텔스 포함) */}
       <div className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm">
-        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between"><span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중</span><span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span></h2>
-        <div className="space-y-2">{active.map(r => (<div key={r.uid} className="flex justify-between items-center bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-black">{r.nickname.slice(0,1)}</div><div className="font-black text-slate-800">{r.nickname} <span className="text-blue-500 text-xs">({r.bikeNumber?.slice(-4)})</span></div></div><div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-full border border-blue-100 shadow-sm animate-pulse"><span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span><span className="text-[10px] font-black text-rose-500">On</span></div></div>))}</div>
+        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
+           <span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중 현황</span>
+           <span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span>
+        </h2>
+        {/* 💡 2열(grid-cols-2) 배치로 변경 */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {active.map(r => (
+            <div key={r.uid} className={`p-3 rounded-[1rem] border shadow-sm flex flex-col gap-1 transition-all ${r.isStealth ? 'bg-purple-50 border-purple-200' : 'bg-green-50 border-green-200'}`}>
+               <div className="flex items-center gap-1.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${r.isStealth ? 'bg-purple-400' : 'bg-green-400'}`}></span>
+                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${r.isStealth ? 'bg-purple-600' : 'bg-green-500'}`}></span>
+                  </span>
+                  <span className={`text-[11px] font-black ${r.isStealth ? 'text-purple-700' : 'text-green-700'}`}>
+                    {r.isStealth ? '🥷 스텔스' : '🟢 운행중'}
+                  </span>
+               </div>
+               <div className="text-[13px] font-black text-slate-800 truncate mt-0.5">{r.nickname}</div>
+               <div className="text-[10px] font-bold text-slate-500 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="bg-white p-5 rounded-[2rem] border border-slate-100 opacity-60 shadow-sm">
-        <h2 className="text-xs font-black text-slate-400 mb-3 flex items-center gap-1.5"><Users size={16}/> 휴식/스텔스 ({inactive.length}명)</h2>
-        <div className="grid grid-cols-2 gap-2">{inactive.map(r => (<div key={r.uid} className="bg-slate-50 p-3 rounded-xl flex items-center gap-2 border border-slate-100"><div className="w-6 h-6 bg-slate-300 text-white rounded-full flex items-center justify-center text-[10px]">{r.nickname.slice(0,1)}</div><span className="text-xs font-bold text-slate-500 truncate">{r.nickname}</span></div>))}</div>
+
+      {/* 🟡 휴식 중 */}
+      <div className="bg-white p-5 rounded-[2rem] border border-slate-100 opacity-80 shadow-sm">
+        <h2 className="text-xs font-black text-slate-400 mb-4 flex items-center justify-between">
+          <span className="flex items-center gap-1.5"><Users size={16}/> 휴식 중</span>
+          <span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px]">{inactive.length}명</span>
+        </h2>
+        <div className="grid grid-cols-2 gap-2.5">
+          {inactive.map(r => (
+            <div key={r.uid} className="p-3 rounded-[1rem] border border-slate-200 bg-slate-50 flex flex-col gap-1">
+               <div className="flex items-center gap-1.5">
+                   <span className="h-2 w-2 rounded-full bg-yellow-400"></span>
+                   <span className="text-[11px] font-black text-slate-500">🟡 휴식중</span>
+               </div>
+               <div className="text-[13px] font-black text-slate-600 truncate mt-0.5">{r.nickname}</div>
+               <div className="text-[10px] font-bold text-slate-400 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div>
+            </div>
+          ))}
+        </div>
       </div>
+
     </div>
   );
 }
