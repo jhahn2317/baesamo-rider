@@ -398,6 +398,9 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingDeliveryShift, setEditingDeliveryShift] = useState(null);
   
+  // 💡 마감 확인용 3선택 팝업 상태 추가
+  const [showCloseChoice, setShowCloseChoice] = useState(false);
+  
   const tabRef = useRef(null);
 
   const emptyForm = { date: getWorkDateStr(), startTime: '', endTime: '', useTwoPhones: false, mainBaeminAmt: '', mainBaeminCnt: '', mainCoupangAmt: '', mainCoupangCnt: '', subBaeminAmt: '', subBaeminCnt: '', subCoupangAmt: '', subCoupangCnt: '' };
@@ -524,6 +527,24 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     }
   };
 
+  const openEditShiftForm = (shift) => {
+    let hasSubData = shift.items.some(i => i.device === 'sub');
+    const form = { ...emptyForm, date: shift.date, startTime: shift.startTime || '', endTime: shift.endTime || '', useTwoPhones: hasSubData };
+    const platforms = ['배민', '쿠팡']; const devices = ['main', 'sub'];
+    devices.forEach(device => {
+        platforms.forEach(platform => {
+            const deviceEng = device === 'main' ? 'main' : 'sub'; const platformEng = platform === '배민' ? 'Baemin' : 'Coupang';
+            let priorAmt = 0; let priorCnt = 0;
+            (dailyDeliveries || []).forEach(d => { if (shift.items.some(item => item.id === d.id)) return; if (d.date === shift.date && d.device === device && d.platform === platform) { priorAmt += (d.amount || 0); priorCnt += (d.count || 0); } });
+            const thisItem = shift.items.find(i => i.device === device && i.platform === platform);
+            const thisAmt = thisItem ? (thisItem.amount || 0) : 0; const thisCnt = thisItem ? (thisItem.count || 0) : 0;
+            const cumulativeAmt = priorAmt + thisAmt; const cumulativeCnt = priorCnt + thisCnt;
+            if (cumulativeAmt > 0 || cumulativeCnt > 0) { form[`${deviceEng}${platformEng}Amt`] = String(cumulativeAmt); form[`${deviceEng}${platformEng}Cnt`] = String(cumulativeCnt); }
+        });
+    });
+    setDeliveryFormData(form); setEditingDeliveryShift(shift); setSelectedShiftDetail(null); setIsDeliveryModalOpen(true); 
+  };
+
   const deleteShift = async (shift) => {
     if(!window.confirm('이 시간대의 기록을 통째로 모두 삭제하시겠습니까?')) return;
     for(const item of shift.items) { await deleteDoc(doc(db, 'delivery', item.id)); }
@@ -547,16 +568,14 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       setMergeModeDate(null); setSelectedShiftsToMerge([]); alert("✨ 성공적으로 회차 통합이 완료되었습니다!");
   };
 
-  // 💡 드디어 잡은 X 버튼 버그 픽스 로직!!
+  // 💡 모달 닫기 버튼 클릭 로직
   const handleCloseDeliveryModal = () => {
      if (editingDeliveryShift) { 
          if(window.confirm("수정 중인 내용을 취소하시겠습니까?")) setIsDeliveryModalOpen(false); 
      } 
      else if (timerActive) { 
-         // 💡 타이머가 돌고 있을 때 마감창을 닫으면, 숨겨진 에러 팝업 대신 확실한 알림창 띄움!
-         if(window.confirm("마감 입력을 취소하고, 계속 운행하시겠습니까?")) {
-             setIsDeliveryModalOpen(false); 
-         }
+         // 💡 타이머 작동 중(운행 중)일 때는 3선택 팝업 띄우기
+         setShowCloseChoice(true);
      } 
      else { 
          if (window.confirm("창을 닫으시겠습니까?\n(입력한 내용은 임시 보관함에 유지됩니다)")) { 
@@ -568,6 +587,26 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
              } 
          } 
      }
+  };
+
+  // 💡 3선택 팝업 처리 로직
+  const handleFinalExit = async (type) => {
+    if (type === 'CONTINUE') {
+      setShowCloseChoice(false);
+    } else if (type === 'LATER') {
+      await handleEndDelivery();
+      const recoveryData = { formData: deliveryFormData, splitQueue: splitQueue };
+      localStorage.setItem('baesamoRecoveryShift', JSON.stringify(recoveryData));
+      setRecoveryShift(recoveryData);
+      setIsDeliveryModalOpen(false);
+      setShowCloseChoice(false);
+    } else if (type === 'NONE') {
+      await handleEndDelivery();
+      localStorage.removeItem('baesamoRecoveryShift');
+      setRecoveryShift(null);
+      setIsDeliveryModalOpen(false);
+      setShowCloseChoice(false);
+    }
   };
 
   const NetDiffInfo = ({ device, platform, inputAmt, inputCnt, date }) => {
@@ -716,6 +755,40 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         })()}
       </div>
 
+      {isPendingSummaryOpen && (() => {
+        const upcomingToDisplay = upcomingPaydays.slice(0, 2);
+        return (
+            <div className="grid grid-cols-2 gap-2 mb-2 animate-in slide-in-from-top-2">
+              {upcomingToDisplay.length === 0 ? (
+                <div className="col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-slate-200 text-center text-slate-500 text-sm font-black">입금 대기 중인 정산금이 없습니다.</div>
+              ) : (
+                upcomingToDisplay.map((pd, idx) => {
+                  const group = pendingByPayday[pd]; const metrics = getGroupMetrics(group.items);
+                  const baeminTot = group.items.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0);
+                  const coupangTot = group.items.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0);
+
+                  return (
+                    <div key={pd} onClick={() => setSelectedWeeklySummary(pd)} className={`rounded-[2rem] p-5 shadow-lg border bg-gradient-to-br from-teal-700 to-cyan-800 border-teal-600 flex flex-col justify-between cursor-pointer active:scale-95 transition-transform text-white relative overflow-hidden col-span-2`}>
+                      <Bike className="absolute -right-2 -bottom-2 w-32 h-32 opacity-10 rotate-12" fill="white" />
+                      <div className="flex flex-col mb-4 relative z-10">
+                          <div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1"><span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm border ${idx === 0 ? 'bg-white text-teal-700 border-white' : 'bg-teal-600 text-white border-teal-500'}`}>{idx === 0 ? '이번주' : '다음주'}</span><span className="text-teal-50">{pd.slice(5).replace('-','/')} 정산예정</span></div>
+                          <div className="flex justify-between items-end">
+                             <div className={`text-[32px] font-black tracking-tighter leading-none mt-1`}>{formatLargeMoney(group.total)}<span className="text-base font-bold ml-1 opacity-80">원</span></div>
+                             <div className="flex flex-col items-end gap-1.5 text-[10px] font-bold opacity-90 pb-1"><span className="flex gap-2 text-teal-50"><span>총 {formatLargeMoney(metrics.totalCnt)}건</span><span>{metrics.durationStr} 근무</span></span><span className="flex gap-2 text-teal-200"><span>평단 {formatLargeMoney(metrics.perDelivery)}원</span><span>시급 {formatLargeMoney(metrics.hourlyRate)}원</span></span></div>
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 relative z-10">
+                         <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">기본기기</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.main || 0)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">투폰(서브)</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.sub || 0)}원</span></div></div>
+                         <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#a5f3fc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(baeminTot)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(coupangTot)}원</span></div></div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+        );
+      })()}
+
       <div ref={tabRef} className="flex items-center gap-2 mt-2">
         <div className="flex bg-white p-1 rounded-2xl flex-1 shadow-sm border border-slate-200">
           <button onClick={() => handleSubTabClick('daily')} className={`flex-1 py-3 rounded-[1rem] text-[13px] font-black transition-all ${deliverySubTab==='daily'?'bg-blue-600 text-white shadow-md':'text-slate-500 hover:bg-slate-50'}`}>상세내역</button>
@@ -736,7 +809,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       )}
 
-      {/* 리스트 영역 (Daily/Calendar/Weekly) */}
+      {/* 리스트 영역 */}
       {deliverySubTab === 'calendar' && (() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -830,7 +903,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true); 
       }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
 
-      {/* 💡 배달 마감 모달 - X버튼 버그 수정 및 스와이프 기능 차단(스크롤 보호) */}
+      {/* 💡 배달 마감 모달 - 스와이프 기능 차단(스크롤 보호) */}
       {isDeliveryModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[120] flex items-end justify-center p-0">
           <div className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[90vh] border-t-8 border-blue-500 mt-20 animate-in slide-in-from-bottom duration-300">
@@ -946,6 +1019,29 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                <div className="grid grid-cols-2 gap-3"><button onClick={() => deleteShift(selectedShiftDetail)} className="py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-sm flex items-center justify-center gap-1.5 shadow-sm active:scale-95"><Trash2 size={18}/> 삭제</button><button onClick={() => setSelectedShiftDetail(null)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button></div>
             </div>
          </div>
+      )}
+
+      {/* 💡 배달 마감 3선택 커스텀 팝업 (가장 높은 z-index) */}
+      {showCloseChoice && (
+        <div className="fixed inset-0 bg-black/80 z-[150] flex items-center justify-center p-6 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black text-slate-900 mb-2 text-center">운행 종료 확인</h3>
+            <p className="text-sm font-bold text-slate-500 mb-6 text-center leading-relaxed">
+              아직 기록이 저장되지 않았습니다.<br/>어떻게 할까요?
+            </p>
+            <div className="space-y-3">
+              <button onClick={() => handleFinalExit('CONTINUE')} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-base shadow-md active:scale-95 transition-all">
+                ✅ 계속 운행 (입력창 유지)
+              </button>
+              <button onClick={() => handleFinalExit('LATER')} className="w-full py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-base active:scale-95 transition-all border border-slate-200">
+                🕒 나중에 입력 (임시 저장)
+              </button>
+              <button onClick={() => handleFinalExit('NONE')} className="w-full py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-base active:scale-95 transition-all border border-rose-100">
+                🚫 기록 없이 즉시 종료
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
