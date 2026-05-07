@@ -527,24 +527,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     }
   };
 
-  const openEditShiftForm = (shift) => {
-    let hasSubData = shift.items.some(i => i.device === 'sub');
-    const form = { ...emptyForm, date: shift.date, startTime: shift.startTime || '', endTime: shift.endTime || '', useTwoPhones: hasSubData };
-    const platforms = ['배민', '쿠팡']; const devices = ['main', 'sub'];
-    devices.forEach(device => {
-        platforms.forEach(platform => {
-            const deviceEng = device === 'main' ? 'main' : 'sub'; const platformEng = platform === '배민' ? 'Baemin' : 'Coupang';
-            let priorAmt = 0; let priorCnt = 0;
-            (dailyDeliveries || []).forEach(d => { if (shift.items.some(item => item.id === d.id)) return; if (d.date === shift.date && d.device === device && d.platform === platform) { priorAmt += (d.amount || 0); priorCnt += (d.count || 0); } });
-            const thisItem = shift.items.find(i => i.device === device && i.platform === platform);
-            const thisAmt = thisItem ? (thisItem.amount || 0) : 0; const thisCnt = thisItem ? (thisItem.count || 0) : 0;
-            const cumulativeAmt = priorAmt + thisAmt; const cumulativeCnt = priorCnt + thisCnt;
-            if (cumulativeAmt > 0 || cumulativeCnt > 0) { form[`${deviceEng}${platformEng}Amt`] = String(cumulativeAmt); form[`${deviceEng}${platformEng}Cnt`] = String(cumulativeCnt); }
-        });
-    });
-    setDeliveryFormData(form); setEditingDeliveryShift(shift); setSelectedShiftDetail(null); setIsDeliveryModalOpen(true); 
-  };
-
   const deleteShift = async (shift) => {
     if(!window.confirm('이 시간대의 기록을 통째로 모두 삭제하시겠습니까?')) return;
     for(const item of shift.items) { await deleteDoc(doc(db, 'delivery', item.id)); }
@@ -568,7 +550,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       setMergeModeDate(null); setSelectedShiftsToMerge([]); alert("✨ 성공적으로 회차 통합이 완료되었습니다!");
   };
 
-  // 💡 모달 닫기 버튼 클릭 로직
   const handleCloseDeliveryModal = () => {
      if (editingDeliveryShift) { 
          if(window.confirm("수정 중인 내용을 취소하시겠습니까?")) setIsDeliveryModalOpen(false); 
@@ -589,10 +570,12 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
      }
   };
 
-  // 💡 3선택 팝업 처리 로직
+  // 💡 3선택 팝업 처리 로직 완벽 수정!
   const handleFinalExit = async (type) => {
     if (type === 'CONTINUE') {
+      // 💡 [수정] 팝업 닫고, 배달 입력창도 닫아서 타이머 메인 화면으로 바로 복귀!
       setShowCloseChoice(false);
+      setIsDeliveryModalOpen(false); 
     } else if (type === 'LATER') {
       await handleEndDelivery();
       const recoveryData = { formData: deliveryFormData, splitQueue: splitQueue };
@@ -903,7 +886,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true); 
       }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
 
-      {/* 💡 배달 마감 모달 - 스와이프 기능 차단(스크롤 보호) */}
+      {/* 💡 배달 마감 모달 */}
       {isDeliveryModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[120] flex items-end justify-center p-0">
           <div className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[90vh] border-t-8 border-blue-500 mt-20 animate-in slide-in-from-bottom duration-300">
@@ -1021,7 +1004,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          </div>
       )}
 
-      {/* 💡 배달 마감 3선택 커스텀 팝업 (가장 높은 z-index) */}
+      {/* 💡 배달 마감 3선택 커스텀 팝업 */}
       {showCloseChoice && (
         <div className="fixed inset-0 bg-black/80 z-[150] flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -1031,7 +1014,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
             </p>
             <div className="space-y-3">
               <button onClick={() => handleFinalExit('CONTINUE')} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-base shadow-md active:scale-95 transition-all">
-                ✅ 계속 운행 (입력창 유지)
+                ✅ 계속 운행 (메인으로 복귀)
               </button>
               <button onClick={() => handleFinalExit('LATER')} className="w-full py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-base active:scale-95 transition-all border border-slate-200">
                 🕒 나중에 입력 (임시 저장)
