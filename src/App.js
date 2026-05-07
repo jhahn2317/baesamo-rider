@@ -195,7 +195,6 @@ function MaintenanceView({ user, userData }) {
   );
 }
 
-
 // === [3. 서브 뷰: 실시간 정보방 (InfoBoardView)] ===
 
 function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) {
@@ -468,7 +467,10 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   
   const tabRef = useRef(null);
 
-  const emptyForm = { date: getWorkDateStr(), startTime: '', endTime: '', useTwoPhones: false, mainBaeminAmt: '', mainBaeminCnt: '', mainCoupangAmt: '', mainCoupangCnt: '', subBaeminAmt: '', subBaeminCnt: '', subCoupangAmt: '', subCoupangCnt: '' };
+  const MAIN_LABEL = user.uid === MASTER_USER_ID ? '정훈' : (userData?.nickname || '메인');
+  const SUB_LABEL = user.uid === MASTER_USER_ID ? '현아' : '투폰(서브)';
+
+  const emptyForm = { date: getWorkDateStr(), startTime: '', endTime: '', useTwoPhones: user.uid === MASTER_USER_ID, mainBaeminAmt: '', mainBaeminCnt: '', mainCoupangAmt: '', mainCoupangCnt: '', subBaeminAmt: '', subBaeminCnt: '', subCoupangAmt: '', subCoupangCnt: '' };
   const [deliveryFormData, setDeliveryFormData] = useState(emptyForm);
   const [timerActive, setTimerActive] = useState(userData?.isRiding || false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -574,7 +576,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       const finalAmt = Math.max(0, inputAmt - saved.amt); const finalCnt = Math.max(0, inputCnt - saved.cnt);
       if(finalAmt > 0 || finalCnt > 0) { 
          adds.push({ userId: user.uid, date: deliveryFormData.date, device, platform, amount: finalAmt, count: finalCnt, startTime: deliveryFormData.startTime, endTime: deliveryFormData.endTime, updatedAt: timestamp, nickname: userData.nickname }); 
-         
          // 🔐 방장님(정훈) 계정일 때만 현아에셋 데이터 동시 생성
          if (user.uid === MASTER_USER_ID) {
             const mappedName = device === 'main' ? '정훈' : '현아';
@@ -765,7 +766,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
               <div className="shrink-0 text-right"><div className="flex flex-col items-end gap-1.5 text-[9px] font-bold opacity-90 pb-1"><span className="flex gap-1.5 text-slate-100"><span>총 {formatLargeMoney(yearlyMetrics.totalCnt)}건</span><span>{yearlyMetrics.durationStr} 근무</span></span><span className="flex gap-1.5 text-slate-300"><span>평단 {formatLargeMoney(yearlyMetrics.perDelivery)}원</span><span>시급 {formatLargeMoney(yearlyMetrics.hourlyRate)}원</span></span></div></div>
             </div>
             <div className="grid grid-cols-2 gap-2 mt-3 relative z-10">
-               <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">기본기기</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyMainAmt)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">투폰(서브)</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlySubAmt)}원</span></div></div>
+               <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyMainAmt)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlySubAmt)}원</span></div></div>
                <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#4cd1cc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyItems.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0))}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyItems.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0))}원</span></div></div>
             </div>
           </div>
@@ -818,7 +819,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 )}
 
                 <div className="grid grid-cols-2 gap-2 relative z-10">
-                   <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">기본기기</span><span className="text-[13px] font-black text-white">{formatLargeMoney(filteredMainItems.reduce((a,b)=>a+(b.amount||0),0))}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">투폰(서브)</span><span className="text-[13px] font-black text-white">{formatLargeMoney(filteredSubItems.reduce((a,b)=>a+(b.amount||0),0))}원</span></div></div>
+                   <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(filteredMainItems.reduce((a,b)=>a+(b.amount||0),0))}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(filteredSubItems.reduce((a,b)=>a+(b.amount||0),0))}원</span></div></div>
                    <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#4cd1cc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(baeminTotal)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(coupangTotal)}원</span></div></div>
                 </div>
               </div>
@@ -849,7 +850,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                           </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 relative z-10">
-                         <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">기본기기</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.main || 0)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">투폰(서브)</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.sub || 0)}원</span></div></div>
+                         <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.main || 0)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.sub || 0)}원</span></div></div>
                          <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#a5f3fc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(baeminTot)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(coupangTot)}원</span></div></div>
                       </div>
                     </div>
@@ -1011,7 +1012,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 <div className="space-y-3">
                   <div className="flex flex-col gap-1">
                      <div className="flex gap-2 items-center w-full">
-                        <span className="w-[60px] shrink-0 text-[12px] font-black text-slate-600 bg-slate-50 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-100">{userData.nickname}</span>
+                        <span className="w-[60px] shrink-0 text-[12px] font-black text-slate-600 bg-slate-50 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-100">{MAIN_LABEL}</span>
                         <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.mainBaeminAmt ? formatLargeMoney(deliveryFormData.mainBaeminAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, mainBaeminAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="총액" className="flex-[7] min-w-0 text-[17px] font-black bg-slate-50 rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:bg-white focus:border-[#2ac1bc] focus:ring-2 focus:ring-[#2ac1bc]/20 transition-all text-slate-900 placeholder:text-slate-300" />
                         <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.mainBaeminCnt} onChange={e => setDeliveryFormData({...deliveryFormData, mainBaeminCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[17px] font-black bg-slate-50 rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:bg-white focus:border-[#2ac1bc] focus:ring-2 focus:ring-[#2ac1bc]/20 transition-all text-slate-900 placeholder:text-slate-300" />
                      </div>
@@ -1023,7 +1024,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                       <div className="w-full border-t border-slate-100"></div>
                       <div className="flex flex-col gap-1 animate-in fade-in">
                         <div className="flex gap-2 items-center w-full">
-                            <span className="w-[60px] shrink-0 text-[11px] font-black text-slate-500 bg-slate-100 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-200 shadow-inner">투폰(서브)</span>
+                            <span className="w-[60px] shrink-0 text-[11px] font-black text-slate-500 bg-slate-100 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-200 shadow-inner">{SUB_LABEL}</span>
                             <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subBaeminAmt ? formatLargeMoney(deliveryFormData.subBaeminAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, subBaeminAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="서브 총액" className="flex-[7] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:bg-white focus:border-[#2ac1bc] focus:ring-2 focus:ring-[#2ac1bc]/20 transition-all text-slate-900 placeholder:text-slate-300" />
                             <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subBaeminCnt} onChange={e => setDeliveryFormData({...deliveryFormData, subBaeminCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:bg-white focus:border-[#2ac1bc] focus:ring-2 focus:ring-[#2ac1bc]/20 transition-all text-slate-900 placeholder:text-slate-300" />
                         </div>
@@ -1040,7 +1041,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                 <div className="space-y-3">
                    <div className="flex flex-col gap-1">
                      <div className="flex gap-2 items-center w-full">
-                        <span className="w-[60px] shrink-0 text-[12px] font-black text-slate-600 bg-white rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-200">{userData.nickname}</span>
+                        <span className="w-[60px] shrink-0 text-[12px] font-black text-slate-600 bg-white rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-200">{MAIN_LABEL}</span>
                         <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.mainCoupangAmt ? formatLargeMoney(deliveryFormData.mainCoupangAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, mainCoupangAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="총액" className="flex-[7] min-w-0 text-[17px] font-black bg-white rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
                         <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.mainCoupangCnt} onChange={e => setDeliveryFormData({...deliveryFormData, mainCoupangCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[17px] font-black bg-white rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
                      </div>
@@ -1052,7 +1053,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                       <div className="w-full border-t border-slate-200"></div>
                       <div className="flex flex-col gap-1 animate-in fade-in">
                         <div className="flex gap-2 items-center w-full">
-                            <span className="w-[60px] shrink-0 text-[11px] font-black text-slate-500 bg-slate-200/50 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-300 shadow-inner">투폰(서브)</span>
+                            <span className="w-[60px] shrink-0 text-[11px] font-black text-slate-500 bg-slate-200/50 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-300 shadow-inner">{SUB_LABEL}</span>
                             <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subCoupangAmt ? formatLargeMoney(deliveryFormData.subCoupangAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, subCoupangAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="서브 총액" className="flex-[7] min-w-0 text-[15px] font-black bg-white rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
                             <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subCoupangCnt} onChange={e => setDeliveryFormData({...deliveryFormData, subCoupangCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[15px] font-black bg-white rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
                         </div>
@@ -1084,7 +1085,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                <h3 className="text-xl font-black mb-4 flex items-center gap-1.5"><Bike size={22} className="text-blue-600"/> 근무 타임 상세</h3>
                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3 mb-6">
                  {selectedShiftDetail.items.map(item => (
-                   <div key={item.id} className="flex justify-between items-center"><div className="flex items-center gap-2"><span className="text-[10px] font-black px-2 py-1 rounded bg-slate-800 text-white">{item.platform}</span><span className="font-black">{userData.nickname}</span><span className="text-[11px] text-slate-500">({item.count}건)</span></div><div className="font-black">{formatLargeMoney(item.amount)}원</div></div>
+                   <div key={item.id} className="flex justify-between items-center"><div className="flex items-center gap-2"><span className="text-[10px] font-black px-2 py-1 rounded bg-slate-800 text-white">{item.platform}</span><span className="font-black">{item.device === 'sub' ? SUB_LABEL : MAIN_LABEL}</span><span className="text-[11px] text-slate-500">({item.count}건)</span></div><div className="font-black">{formatLargeMoney(item.amount)}원</div></div>
                  ))}
                </div>
                <div className="grid grid-cols-2 gap-3"><button onClick={() => deleteShift(selectedShiftDetail)} className="py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-sm flex items-center justify-center gap-1.5 shadow-sm active:scale-95"><Trash2 size={18}/> 삭제</button><button onClick={() => setSelectedShiftDetail(null)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button></div>
@@ -1130,9 +1131,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('delivery'); 
   const [dailyDeliveries, setDailyDeliveries] = useState([]);
   const [globalNotice, setGlobalNotice] = useState(null);
-  
   const [triggerInfoModal, setTriggerInfoModal] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false); // 💡 마이그레이션 버튼 로딩용 상태 추가
+  const [isSyncing, setIsSyncing] = useState(false);
+  // 💡 마이그레이션 버튼 로딩용 상태 추가
   
   const todayStr = getKSTDateStr();
   const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
