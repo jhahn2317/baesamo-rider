@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, where, deleteDoc, updateDoc, serverTimestamp, orderBy, getDocs } from 'firebase/firestore';
 
 import { 
   Plus, Calendar as CalendarIcon, Bike, CheckCircle2, Trash2, Clock, ChevronDown, ChevronUp, ChevronDownSquare,
   Target, Edit3, X, Timer, Coins, Filter, RefreshCw, ChevronLeft, ChevronRight, Settings, Users, Ghost,
-  CalendarCheck, AlertCircle, Share, Wrench, MessageSquare, Megaphone, ThumbsUp, Flame, MapPin, Store, Building, Search
+  CalendarCheck, AlertCircle, Share, Wrench, MessageSquare, Megaphone, ThumbsUp, Flame, MapPin, Store, Building, Search, Download
 } from 'lucide-react';
 
 // === [1. 환경설정 및 공통 함수 (Firebase, Utils)] ===
@@ -19,6 +19,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// 🚀 현아에셋 연결용 투잡(Secondary) DB 엔진!
+const hyunaConfig = {
+  apiKey: "AIzaSyDmsKLrfvPrJOGTdeW2HseRWiGMGqM6asw", authDomain: "hyuna-asset-pro.firebaseapp.com",
+  projectId: "hyuna-asset-pro", storageBucket: "hyuna-asset-pro.firebasestorage.app",
+  messagingSenderId: "571320052451", appId: "1:571320052451:web:3ef33254a404675311f3d6"
+};
+const hyunaApp = initializeApp(hyunaConfig, 'hyunaApp');
+const hyunaDb = getFirestore(hyunaApp);
+
+// 🔐 방장님 마스터키! (이 계정만 동기화 기능 활성화)
+const MASTER_USER_ID = "MPxgtZ6F9HPNF0l7xTO5lTHhWGH2";
 
 const getKSTDate = () => { const d = new Date(); return new Date(d.getTime() + (d.getTimezoneOffset() * 60000) + (9 * 3600000)); };
 const getKSTDateStr = (dateObj = getKSTDate()) => `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
@@ -96,7 +108,7 @@ export const handleTouchEnd = (e, closeFunction) => {
 
 // === [2. 서브 뷰: 정비 관리 (MaintenanceView)] ===
 
-function MaintenanceView({ user }) {
+function MaintenanceView({ user, userData }) {
   const [list, setAllList] = useState([]); 
   const [modalOpen, setModalOpen] = useState(false); 
   const [step, setStep] = useState(1);
@@ -121,7 +133,7 @@ function MaintenanceView({ user }) {
     try {
       await addDoc(collection(db, 'maintenance'), { 
         item: formData.item, date: formData.date, cost: parseInt(String(formData.cost).replace(/[^0-9]/g, '')) || 0,
-        mileage: parseInt(String(formData.mileage).replace(/[^0-9]/g, '')) || 0, userId: user.uid, createdAt: serverTimestamp() 
+        mileage: parseInt(String(formData.mileage).replace(/[^0-9]/g, '')) || 0, userId: user.uid, nickname: userData.nickname, createdAt: serverTimestamp() 
       });
       setModalOpen(false); setStep(1); setFormData({ item: '', date: getKSTDateStr(), cost: '', mileage: '' });
     } catch (error) { alert(`[저장 실패] ${error.message}`); }
@@ -545,9 +557,13 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const yearlyMainAmt = yearlyItems.filter(d => d.device === 'main').reduce((a,b)=>a+(b.amount||0), 0);
   const yearlySubAmt = yearlyItems.filter(d => d.device === 'sub').reduce((a,b)=>a+(b.amount||0), 0);
 
+  // 🚀 [투잡 엔진] 동시 저장 마감 로직
   const handleDeliverySubmit = async (e) => {
     e.preventDefault(); if (!user) return;
-    const timestamp = new Date().toISOString(); const adds = [];
+    const timestamp = new Date().toISOString(); 
+    const adds = [];
+    const hyunaAdds = []; // 💡 현아에셋 DB용 동시 저장 데이터 배열
+
     if (!editingDeliveryShift && timerActive) { handleEndDelivery(); }
 
     const createAdd = (inputAmtStr, inputCntStr, device, platform) => {
@@ -556,7 +572,18 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       if(inputAmt === 0 && inputCnt === 0) return;
       const saved = getTodaySaved(device, platform, deliveryFormData.date);
       const finalAmt = Math.max(0, inputAmt - saved.amt); const finalCnt = Math.max(0, inputCnt - saved.cnt);
-      if(finalAmt > 0 || finalCnt > 0) { adds.push({ userId: user.uid, date: deliveryFormData.date, device, platform, amount: finalAmt, count: finalCnt, startTime: deliveryFormData.startTime, endTime: deliveryFormData.endTime, updatedAt: timestamp, nickname: userData.nickname }); }
+      if(finalAmt > 0 || finalCnt > 0) { 
+         adds.push({ userId: user.uid, date: deliveryFormData.date, device, platform, amount: finalAmt, count: finalCnt, startTime: deliveryFormData.startTime, endTime: deliveryFormData.endTime, updatedAt: timestamp, nickname: userData.nickname }); 
+         
+         // 🔐 방장님(정훈) 계정일 때만 현아에셋 데이터 동시 생성
+         if (user.uid === MASTER_USER_ID) {
+            const mappedName = device === 'main' ? '정훈' : '현아';
+            hyunaAdds.push({
+                earner: mappedName, date: deliveryFormData.date, platform, amount: finalAmt, count: finalCnt,
+                startTime: deliveryFormData.startTime, endTime: deliveryFormData.endTime, updatedAt: timestamp, updatedBy: '정훈'
+            });
+         }
+      }
     };
 
     createAdd(deliveryFormData.mainBaeminAmt, deliveryFormData.mainBaeminCnt, 'main', '배민');
@@ -567,8 +594,16 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     }
 
     if (adds.length > 0) {
-      if (editingDeliveryShift) { for(const item of editingDeliveryShift.items) { await deleteDoc(doc(db, 'delivery', item.id)); } for(const newDel of adds) { await addDoc(collection(db, 'delivery'), newDel); } } 
-      else { for(const newDel of adds) await addDoc(collection(db, 'delivery'), newDel); }
+      if (editingDeliveryShift) { 
+         for(const item of editingDeliveryShift.items) { await deleteDoc(doc(db, 'delivery', item.id)); } 
+         for(const newDel of adds) { await addDoc(collection(db, 'delivery'), newDel); } 
+      } else { 
+         for(const newDel of adds) await addDoc(collection(db, 'delivery'), newDel); 
+         // 🚀 현아에셋 DB 동시 저장 실행
+         if (hyunaAdds.length > 0 && user.uid === MASTER_USER_ID) {
+            for(const hDel of hyunaAdds) { await addDoc(collection(hyunaDb, 'artifacts/hyuna-asset-pro/public/data/delivery'), hDel); }
+         }
+      }
     }
     
     if (splitQueue.length > 0) {
@@ -1097,6 +1132,7 @@ export default function App() {
   const [globalNotice, setGlobalNotice] = useState(null);
   
   const [triggerInfoModal, setTriggerInfoModal] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false); // 💡 마이그레이션 버튼 로딩용 상태 추가
   
   const todayStr = getKSTDateStr();
   const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
@@ -1140,6 +1176,47 @@ export default function App() {
       return onSnapshot(q, (s) => setPendingUsers(s.docs.map(doc => ({ uid: doc.id, ...doc.data() })))); 
     } 
   }, [isAdmin]);
+
+  // 🚀 [현아에셋 ➔ 배사모] 과거 데이터 마이그레이션 함수
+  const handleSyncFromHyuna = async () => {
+    if (!window.confirm("현아에셋 DB에서 과거 데이터(1월~)를 가져옵니다.\n이미 배사모에 있는 데이터와 겹치면 중복될 수 있습니다.\n\n가져오시겠습니까?")) return;
+    setIsSyncing(true);
+    try {
+      const snap = await getDocs(collection(hyunaDb, 'artifacts/hyuna-asset-pro/public/data/delivery'));
+      const hyunaData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      let syncCount = 0;
+      for (const hd of hyunaData) {
+         const mappedDevice = hd.earner === '현아' ? 'sub' : 'main';
+         const isDuplicate = dailyDeliveries.some(bd => 
+            bd.date === hd.date && 
+            bd.platform === hd.platform && 
+            bd.device === mappedDevice && 
+            bd.amount === hd.amount
+         );
+
+         if (!isDuplicate) {
+            await addDoc(collection(db, 'delivery'), {
+               userId: user.uid,
+               date: hd.date,
+               device: mappedDevice,
+               platform: hd.platform,
+               amount: hd.amount,
+               count: hd.count,
+               startTime: hd.startTime || '',
+               endTime: hd.endTime || '',
+               updatedAt: hd.updatedAt || new Date().toISOString(),
+               nickname: userData.nickname
+            });
+            syncCount++;
+         }
+      }
+      alert(`🎉 마이그레이션 완료!\n총 ${syncCount}건의 새로운 데이터를 현아에셋에서 가져왔습니다.`);
+    } catch (err) {
+      alert(`동기화 중 오류가 발생했습니다: ${err.message}`);
+    }
+    setIsSyncing(false);
+  };
 
   if (loading) return <div className="h-[100dvh] flex items-center justify-center font-black text-blue-500 text-2xl bg-blue-50">🛵 BAESAMO PRO...</div>;
   
@@ -1203,7 +1280,8 @@ export default function App() {
                resetModalTrigger={() => setTriggerInfoModal(false)} 
              />
           )}
-          {activeTab === 'maintenance' && <MaintenanceView user={user} />}
+          {/* 💡 정비 관리에 userData 전달 (닉네임 저장용) */}
+          {activeTab === 'maintenance' && <MaintenanceView user={user} userData={userData} />}
           {activeTab === 'status' && <StatusView allUsers={allUsers} />}
           {activeTab === 'settings' && (
             <div className="p-5 space-y-6 animate-in fade-in duration-500">
@@ -1213,6 +1291,18 @@ export default function App() {
                 <div className="bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-black inline-block border border-green-200">{isAdmin ? '👑 방장 (관리자)' : '정식 멤버'}</div>
                 <button onClick={() => signOut(auth)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-black border border-slate-200 active:bg-slate-100 transition-colors">로그아웃</button>
               </div>
+
+              {/* 🚀 현아에셋 동기화 버튼 (오직 방장님 계정만 뜸) */}
+              {user.uid === MASTER_USER_ID && (
+                <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-200 shadow-sm">
+                  <h3 className="text-sm font-black text-indigo-700 mb-3 flex items-center gap-1.5"><Download size={16}/> 현아에셋 데이터 동기화</h3>
+                  <p className="text-xs font-bold text-indigo-600/70 mb-4">현아에셋 앱에 저장된 과거 배달 데이터를 배사모에 모두 불러옵니다.</p>
+                  <button onClick={handleSyncFromHyuna} disabled={isSyncing} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm active:scale-95 shadow-sm disabled:opacity-50 flex items-center justify-center gap-2 transition-transform">
+                     {isSyncing ? <RefreshCw size={18} className="animate-spin" /> : <Download size={18} />}
+                     {isSyncing ? '동기화 중...' : '현아에셋 과거 데이터 가져오기'}
+                  </button>
+                </div>
+              )}
               
               <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
                 <h3 className="text-sm font-black text-blue-600 mb-3 flex items-center gap-1.5"><Target size={16}/> {selectedMonth}월 목표 설정</h3>
