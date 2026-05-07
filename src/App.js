@@ -386,7 +386,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [isDeliverySummaryOpen, setIsDeliverySummaryOpen] = useState(true);
   const [isPendingSummaryOpen, setIsPendingSummaryOpen] = useState(false);
   const [isYearlySummaryOpen, setIsYearlySummaryOpen] = useState(false);
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [mergeModeDate, setMergeModeDate] = useState(null);
   const [selectedShiftsToMerge, setSelectedShiftsToMerge] = useState([]);
   const [splitQueue, setSplitQueue] = useState([]);
@@ -525,25 +524,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     }
   };
 
-  const openEditShiftForm = (shift) => {
-    let hasSubData = shift.items.some(i => i.device === 'sub');
-    const form = { ...emptyForm, date: shift.date, startTime: shift.startTime || '', endTime: shift.endTime || '', useTwoPhones: hasSubData };
-    const platforms = ['배민', '쿠팡']; const devices = ['main', 'sub'];
-    devices.forEach(device => {
-        platforms.forEach(platform => {
-            const deviceEng = device === 'main' ? 'main' : 'sub'; const platformEng = platform === '배민' ? 'Baemin' : 'Coupang';
-            let priorAmt = 0; let priorCnt = 0;
-            (dailyDeliveries || []).forEach(d => { if (shift.items.some(item => item.id === d.id)) return; if (d.date === shift.date && d.device === device && d.platform === platform) { priorAmt += (d.amount || 0); priorCnt += (d.count || 0); } });
-            const thisItem = shift.items.find(i => i.device === device && i.platform === platform);
-            const thisAmt = thisItem ? (thisItem.amount || 0) : 0; const thisCnt = thisItem ? (thisItem.count || 0) : 0;
-            const cumulativeAmt = priorAmt + thisAmt; const cumulativeCnt = priorCnt + thisCnt;
-            if (cumulativeAmt > 0 || cumulativeCnt > 0) { form[`${deviceEng}${platformEng}Amt`] = String(cumulativeAmt); form[`${deviceEng}${platformEng}Cnt`] = String(cumulativeCnt); }
-        });
-    });
-    setDeliveryFormData(form); setEditingDeliveryShift(shift); setSelectedShiftDetail(null); setIsDeliveryModalOpen(true); 
-  };
-
-  // 💡 삭제 팝업 적용
   const deleteShift = async (shift) => {
     if(!window.confirm('이 시간대의 기록을 통째로 모두 삭제하시겠습니까?')) return;
     for(const item of shift.items) { await deleteDoc(doc(db, 'delivery', item.id)); }
@@ -552,7 +532,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
 
   const handleToggleMergeShift = (shiftId) => { setSelectedShiftsToMerge(prev => prev.includes(shiftId) ? prev.filter(id => id !== shiftId) : [...prev, shiftId]); };
 
-  // 💡 회차 통합 로직 복구 완료
   const executeShiftMerge = async (date) => {
       if (selectedShiftsToMerge.length < 2) { alert("통합할 회차를 2개 이상 선택해주세요!"); return; }
       if (!window.confirm(`선택한 ${selectedShiftsToMerge.length}개의 회차를 하나로 완벽하게 통합하시겠습니까?`)) return;
@@ -568,10 +547,27 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       setMergeModeDate(null); setSelectedShiftsToMerge([]); alert("✨ 성공적으로 회차 통합이 완료되었습니다!");
   };
 
+  // 💡 드디어 잡은 X 버튼 버그 픽스 로직!!
   const handleCloseDeliveryModal = () => {
-     if (editingDeliveryShift) { if(window.confirm("수정 중인 내용을 취소하시겠습니까?")) setIsDeliveryModalOpen(false); } 
-     else if (timerActive) { setShowCloseConfirm(true); } 
-     else { if (window.confirm("창을 닫으시겠습니까?\n(임시 보관함에 유지됩니다)")) { setIsDeliveryModalOpen(false); if (deliveryFormData.startTime) { const recoveryData = { formData: deliveryFormData, splitQueue: splitQueue }; localStorage.setItem('baesamoRecoveryShift', JSON.stringify(recoveryData)); setRecoveryShift(recoveryData); } } }
+     if (editingDeliveryShift) { 
+         if(window.confirm("수정 중인 내용을 취소하시겠습니까?")) setIsDeliveryModalOpen(false); 
+     } 
+     else if (timerActive) { 
+         // 💡 타이머가 돌고 있을 때 마감창을 닫으면, 숨겨진 에러 팝업 대신 확실한 알림창 띄움!
+         if(window.confirm("마감 입력을 취소하고, 계속 운행하시겠습니까?")) {
+             setIsDeliveryModalOpen(false); 
+         }
+     } 
+     else { 
+         if (window.confirm("창을 닫으시겠습니까?\n(입력한 내용은 임시 보관함에 유지됩니다)")) { 
+             setIsDeliveryModalOpen(false); 
+             if (deliveryFormData.startTime) { 
+                 const recoveryData = { formData: deliveryFormData, splitQueue: splitQueue }; 
+                 localStorage.setItem('baesamoRecoveryShift', JSON.stringify(recoveryData)); 
+                 setRecoveryShift(recoveryData); 
+             } 
+         } 
+     }
   };
 
   const NetDiffInfo = ({ device, platform, inputAmt, inputCnt, date }) => {
@@ -586,14 +582,12 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   return (
     <div className="flex flex-col gap-2 pb-8 pt-1 animate-in fade-in duration-500 text-slate-800 px-5">
       
-      {/* 💡 전광판의 끊김 없는 무한 롤링을 위한 CSS */}
       <style>{`
         @keyframes custom-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } 
         .animate-custom-scroll { display: flex; width: max-content; animation: custom-scroll 12s linear infinite; }
       `}</style>
       
       <div className="mt-2">
-        {/* 💡 전광판 클릭 시 onNoticeClick 호출 ➔ 정보방 팝업 오픈 */}
         <div onClick={onNoticeClick} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 overflow-hidden ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}>
           <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}><AlertCircle size={18}/></div>
           <div className={`flex-1 min-w-0 font-black text-[13px] overflow-hidden ${displayNotice ? 'text-rose-600' : 'text-slate-400'}`}>
@@ -742,6 +736,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       )}
 
+      {/* 리스트 영역 (Daily/Calendar/Weekly) */}
       {deliverySubTab === 'calendar' && (() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -835,7 +830,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true); 
       }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
 
-      {/* 💡 완전히 원래 폼 디자인으로 복구된 배달 마감 모달 (z-index 최상위, 터치 이벤트 삭제) */}
+      {/* 💡 배달 마감 모달 - X버튼 버그 수정 및 스와이프 기능 차단(스크롤 보호) */}
       {isDeliveryModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[120] flex items-end justify-center p-0">
           <div className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[90vh] border-t-8 border-blue-500 mt-20 animate-in slide-in-from-bottom duration-300">
@@ -845,7 +840,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
               <h2 className="text-xl font-black text-slate-900 tracking-tight">
                 {editingDeliveryShift ? '근무 기록 수정' : splitQueue.length > 0 ? '이전 시간 정산 기록' : '배달 최종 마감'}
               </h2>
-              <button onClick={handleCloseDeliveryModal} className="bg-white text-slate-500 p-2.5 rounded-full shadow-sm border border-slate-200 hover:bg-slate-50">
+              <button onClick={handleCloseDeliveryModal} className="bg-white text-slate-500 p-2.5 rounded-full shadow-sm border border-slate-200 hover:bg-slate-50 active:scale-90">
                 <X size={18}/>
               </button>
             </div>
@@ -936,6 +931,21 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
             </form>
           </div>
         </div>
+      )}
+
+      {selectedShiftDetail && (
+         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-[80] p-0">
+            <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl relative border-t-8 border-blue-600 animate-in slide-in-from-bottom duration-300">
+               <div className="w-14 h-1.5 bg-slate-300 rounded-full mx-auto mb-6"></div>
+               <h3 className="text-xl font-black mb-4 flex items-center gap-1.5"><Bike size={22} className="text-blue-600"/> 근무 타임 상세</h3>
+               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3 mb-6">
+                 {selectedShiftDetail.items.map(item => (
+                   <div key={item.id} className="flex justify-between items-center"><div className="flex items-center gap-2"><span className="text-[10px] font-black px-2 py-1 rounded bg-slate-800 text-white">{item.platform}</span><span className="font-black">{userData.nickname}</span><span className="text-[11px] text-slate-500">({item.count}건)</span></div><div className="font-black">{formatLargeMoney(item.amount)}원</div></div>
+                 ))}
+               </div>
+               <div className="grid grid-cols-2 gap-3"><button onClick={() => deleteShift(selectedShiftDetail)} className="py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-sm flex items-center justify-center gap-1.5 shadow-sm active:scale-95"><Trash2 size={18}/> 삭제</button><button onClick={() => setSelectedShiftDetail(null)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button></div>
+            </div>
+         </div>
       )}
     </div>
   );
