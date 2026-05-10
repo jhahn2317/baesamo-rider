@@ -416,8 +416,63 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingDeliveryShift, setEditingDeliveryShift] = useState(null);
   const [showCloseChoice, setShowCloseChoice] = useState(false);
+  /** 회차 행 길게 누르기 → 수정 버튼 노출용 (`${date}::${shift.id}`) */
+  const [quickActionShiftKey, setQuickActionShiftKey] = useState(null);
+  const longPressTimerRef = useRef(null);
+  const longPressConsumedClickRef = useRef(false);
+  const longPressStartYRef = useRef(0);
   
   const tabRef = useRef(null);
+
+  const getShiftRowKey = (date, shift) => `${date}::${shift.id}`;
+  const cancelShiftLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+  const startShiftLongPress = (date, shift) => {
+    if (isReadOnly) return;
+    longPressConsumedClickRef.current = false;
+    cancelShiftLongPress();
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
+      longPressConsumedClickRef.current = true;
+      setQuickActionShiftKey(getShiftRowKey(date, shift));
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+      } catch (_) {}
+    }, 520);
+  };
+  const onShiftRowTouchStart = (e, date, shift) => {
+    if (isReadOnly || !e.touches[0]) return;
+    longPressStartYRef.current = e.touches[0].clientY;
+    startShiftLongPress(date, shift);
+  };
+  const onShiftRowTouchMove = (e) => {
+    if (!longPressTimerRef.current || !e.touches[0]) return;
+    if (Math.abs(e.touches[0].clientY - longPressStartYRef.current) > 14) cancelShiftLongPress();
+  };
+  const onShiftRowMouseDown = (e, date, shift) => {
+    if (isReadOnly || e.button !== 0) return;
+    longPressStartYRef.current = e.clientY;
+    startShiftLongPress(date, shift);
+  };
+  const onShiftRowMouseMove = (e) => {
+    if (!longPressTimerRef.current || (e.buttons & 1) === 0) return;
+    if (Math.abs(e.clientY - longPressStartYRef.current) > 14) cancelShiftLongPress();
+  };
+  const onShiftRowPressEnd = () => {
+    cancelShiftLongPress();
+  };
+  const onShiftRowClick = (date, shift) => {
+    if (longPressConsumedClickRef.current) {
+      longPressConsumedClickRef.current = false;
+      return;
+    }
+    setQuickActionShiftKey(null);
+    setSelectedShiftDetail(shift);
+  };
 
   // 💡 가면 쓰기 중이 아니면서, 내가 정훈님일 때만 라벨 변환 적용!
   const isViewingSelf = !isReadOnly;
@@ -436,6 +491,10 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     else { setElapsedSeconds(0); }
     return () => clearInterval(interval);
   }, [timerActive, userData?.trackingStartTime]);
+
+  useEffect(() => {
+    if (selectedShiftDetail) setQuickActionShiftKey(null);
+  }, [selectedShiftDetail]);
 
   const handleStartDelivery = async () => { await updateDoc(doc(db, 'users', user.uid), { isRiding: true, isStealth: false, trackingStartTime: new Date().toISOString() }); };
   const handleEndDelivery = async () => { await updateDoc(doc(db, 'users', user.uid), { isRiding: false, isStealth: false, trackingStartTime: null }); };
@@ -715,7 +774,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                  <div className="border-t border-slate-100 bg-slate-50 flex justify-between items-center pr-3">
                     <button onClick={(e) => toggleDailyDate(date, e)} className="flex-1 py-3 flex justify-center items-center gap-1 text-[12px] font-black text-slate-500 hover:text-blue-600 transition-colors">{expandedDailyDates[date] ? <>▲ 닫기</> : <>▼ 회차별 상세</>}</button>
                     {/* 🚀 [복구] 읽기 전용이 아닐 때만 통합 버튼 노출 */}
-                    {!isReadOnly && expandedDailyDates[date] && shiftList.length > 1 && (<button onClick={() => {setMergeModeDate(date); setSelectedShiftsToMerge([]);}} className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-black rounded-lg shadow-sm active:scale-95 flex items-center gap-1">🔗 통합</button>)}
+                    {!isReadOnly && expandedDailyDates[date] && shiftList.length > 1 && (<button onClick={() => { setMergeModeDate(date); setSelectedShiftsToMerge([]); setQuickActionShiftKey(null); }} className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-black rounded-lg shadow-sm active:scale-95 flex items-center gap-1">🔗 통합</button>)}
                  </div>
 
                  {/* 🚀 [복구] 통합(Merge) UI 렌더링 블록 */}
@@ -753,13 +812,52 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                             shiftDurationStr = `${String(Math.floor(totalMins/60)).padStart(2,'0')}:${String(totalMins%60).padStart(2,'0')}`; shiftHourlyRate = Math.round(shift.totalAmt / (totalMins / 60));
                         }
                         const platforms = Array.from(new Set(shift.items.map(item => item.platform)));
+                        const rowKey = getShiftRowKey(date, shift);
                         return (
-                          <div key={shift.id} onClick={() => setSelectedShiftDetail(shift)} className="flex justify-between items-center p-3 rounded-2xl border bg-gradient-to-br from-slate-500 to-indigo-600 text-white shadow-sm active:scale-95 transition-all cursor-pointer">
+                          <div key={shift.id} className="rounded-2xl border border-white/10 overflow-hidden shadow-sm select-none">
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => onShiftRowClick(date, shift)}
+                              onTouchStart={(e) => onShiftRowTouchStart(e, date, shift)}
+                              onTouchMove={onShiftRowTouchMove}
+                              onTouchEnd={onShiftRowPressEnd}
+                              onTouchCancel={onShiftRowPressEnd}
+                              onMouseDown={(e) => onShiftRowMouseDown(e, date, shift)}
+                              onMouseMove={onShiftRowMouseMove}
+                              onMouseUp={onShiftRowPressEnd}
+                              onMouseLeave={onShiftRowPressEnd}
+                              className="flex justify-between items-center p-3 bg-gradient-to-br from-slate-500 to-indigo-600 text-white active:scale-[0.99] transition-transform cursor-pointer"
+                            >
                               <div className="flex items-center gap-2">
                                   <div className="flex flex-col items-center justify-center shrink-0 w-[36px]"><span className="text-[11px] font-black px-1.5 py-0.5 rounded border border-white/20 bg-white/20">{shiftOrder}차</span>{shiftDurationStr && <span className="text-[9px] font-bold text-indigo-100">({shiftDurationStr})</span>}</div>
                                   <div className="pl-1"><div className="font-bold text-[13px]">{shift.startTime}~{shift.endTime}</div><div className="flex gap-1 mt-0.5">{platforms.map(p => (<span key={p} className="text-[9px] font-black px-1 py-0.5 rounded bg-white/20">{p}</span>))}</div></div>
                               </div>
                               <div className="text-right"><div className="font-black text-[16px] tracking-tighter">{formatLargeMoney(shift.totalAmt)}원</div><div className="text-[9px] font-bold text-indigo-100">{shift.totalCnt}건 완료</div></div>
+                            </div>
+                            {!isReadOnly && quickActionShiftKey === rowKey && (
+                              <div className="flex gap-2 px-2 py-2 bg-slate-900/90 border-t border-white/10">
+                                <button
+                                  type="button"
+                                  className="flex-1 py-2.5 rounded-xl bg-white text-blue-700 font-black text-[12px] shadow-sm active:scale-95 transition-transform"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setQuickActionShiftKey(null);
+                                    setSelectedShiftDetail(null);
+                                    openEditShiftForm(shift);
+                                  }}
+                                >
+                                  타임 수정
+                                </button>
+                                <button
+                                  type="button"
+                                  className="shrink-0 px-3 py-2.5 rounded-xl bg-white/15 text-white font-bold text-[11px] active:scale-95"
+                                  onClick={(e) => { e.stopPropagation(); setQuickActionShiftKey(null); }}
+                                >
+                                  닫기
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                         })}
