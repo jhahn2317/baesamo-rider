@@ -1001,28 +1001,27 @@ export default function App() {
     };
   }, []);
 
-  // 💡 [수도꼭지 분리] 선택한 사용자의 수익 데이터만 정확히 가져옵니다. (viewingDeliveryUserId = 문자열 단일 소스)
+  // 💡 [수도꼭지 분리] 멤버 열람 시 viewingDeliveryUserId 로 쿼리. Firestore 규칙에 방장(MASTER)의 타인 delivery 읽기가 있어야 데이터가 옵니다.
   useEffect(() => {
     let unsubDelivery = null;
-    if (user) {
-      const v = typeof viewingDeliveryUserId === 'string' ? viewingDeliveryUserId.trim() : '';
-      const targetUid = v || user.uid;
-      const q = query(collection(db, 'delivery'), where('userId', '==', targetUid));
-      unsubDelivery = onSnapshot(q, (s) => 
-        setDailyDeliveries(s.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse())
-      );
-    }
+    if (!user?.uid) return () => {};
+    const v = typeof viewingDeliveryUserId === 'string' ? viewingDeliveryUserId.trim() : '';
+    const targetUid = v || user.uid;
+
+    const sortRows = (rows) =>
+      [...rows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse();
+
+    const mapDocs = (docs) => docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+
+    unsubDelivery = onSnapshot(
+      query(collection(db, 'delivery'), where('userId', '==', targetUid)),
+      (s) => setDailyDeliveries(sortRows(mapDocs(s.docs))),
+      () => setDailyDeliveries([])
+    );
     return () => {
       if (unsubDelivery) unsubDelivery();
     };
   }, [user?.uid, viewingDeliveryUserId]);
-
-  const scopedDailyDeliveries = useMemo(() => {
-    const list = dailyDeliveries || [];
-    const v = typeof viewingDeliveryUserId === 'string' ? viewingDeliveryUserId.trim() : '';
-    if (!v || !user?.uid || v === user.uid) return list;
-    return list.filter((d) => d.userId === v);
-  }, [dailyDeliveries, viewingDeliveryUserId, user?.uid]);
 
   const isAdmin = userData?.status === 'admin' || userData?.isAdmin === true;
   
@@ -1140,7 +1139,7 @@ export default function App() {
              <DeliveryView 
                user={user} 
                userData={impersonatingUser || userData} 
-               dailyDeliveries={scopedDailyDeliveries} 
+               dailyDeliveries={dailyDeliveries} 
                selectedYear={selectedYear} 
                selectedMonth={selectedMonth} 
                globalNotice={globalNotice}

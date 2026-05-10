@@ -1,0 +1,22 @@
+// Firebase Console → Firestore → 규칙 에 기존 rules 안에 병합하세요.
+// 멤버 수익 열람 시: 방장(아래 UID)이 다른 사람의 delivery 문서를 "읽기"할 수 있어야 onSnapshot 이 데이터를 반환합니다.
+// (규칙이 본인 userId 만 허용하면 쿼리 결과가 비어 화면이 0원이 됩니다.)
+
+// --- 붙여넣기 시작 (match /databases/{database}/documents { ... } 내부) ---
+    function isBaesamoMaster() {
+      return request.auth != null
+        && request.auth.uid == "MPxgtZ6F9HPNF0l7xTO5lTHhWGH2";
+    }
+
+    match /delivery/{docId} {
+      allow read: if request.auth != null
+        && (resource.data.userId == request.auth.uid || isBaesamoMaster());
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+    }
+// --- 붙여넣기 끝 ---
+
+// 주의: users, board, maintenance, settings 등 다른 컬렉션 규칙은 그대로 두고
+// 위 match /delivery 만 기존 delivery 규칙과 교체·병합하세요.
