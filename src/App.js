@@ -29,7 +29,7 @@ const hyunaConfig = {
 const hyunaApp = initializeApp(hyunaConfig, 'hyunaApp');
 const hyunaDb = getFirestore(hyunaApp);
 
-// 🔐 방장님 마스터키! (이 계정만 동기화 기능 및 관리자 조회 기능 활성화)
+// 🔐 방장님 마스터키! (이 계정만 동기화 기능 활성화)
 const MASTER_USER_ID = "MPxgtZ6F9HPNF0l7xTO5lTHhWGH2";
 
 const getKSTDate = () => { const d = new Date(); return new Date(d.getTime() + (d.getTimezoneOffset() * 60000) + (9 * 3600000)); };
@@ -95,7 +95,7 @@ const getGroupMetrics = (items) => {
   return { durationStr: totalMins > 0 ? `${hours > 0 ? hours+'시간 ' : ''}${mins > 0 ? mins+'분' : ''}`.trim() : '-', totalCnt, totalAmt, perDelivery: totalCnt > 0 ? Math.round(totalAmt / totalCnt) : 0, hourlyRate: totalMins > 0 ? Math.round(totalAmt / (totalMins / 60)) : 0 };
 };
 
-// 💡 터치 드래그 닫기 함수 (현재 정보방/레이크원/정비 모달 등에만 사용)
+// 💡 터치 드래그 닫기 함수
 export const handleTouchStart = (e) => { e.currentTarget.dataset.startY = e.touches[0].clientY; e.currentTarget.style.transition = 'none'; };
 export const handleTouchMove = (e) => { const swipeDistance = e.touches[0].clientY - parseFloat(e.currentTarget.dataset.startY || 0); if (swipeDistance > 0) e.currentTarget.style.transform = `translateY(${swipeDistance}px)`; };
 export const handleTouchEnd = (e, closeFunction) => {
@@ -106,7 +106,6 @@ export const handleTouchEnd = (e, closeFunction) => {
 };
 
 // === [2. 서브 뷰: 정비 관리 (MaintenanceView)] ===
-
 function MaintenanceView({ user, userData }) {
   const [list, setAllList] = useState([]); 
   const [modalOpen, setModalOpen] = useState(false); 
@@ -194,14 +193,11 @@ function MaintenanceView({ user, userData }) {
 }
 
 // === [3. 서브 뷰: 실시간 정보방 (InfoBoardView)] ===
-
 function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) {
   const [list, setList] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLakeOpen, setIsLakeOpen] = useState(false);
   const [lakeRoom, setLakeRoom] = useState('');
-  
-  // 🌤️ 날씨 관련 상태
   const [weatherData, setWeatherData] = useState(null);
 
   const [category, setCategory] = useState('🚨단속');
@@ -223,29 +219,17 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
     return onSnapshot(q, (s) => setList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
 
-  // 💡 기상청 주간 날씨 가져오기 로직 (동탄7동/산척동 기준)
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        // 기상청 NX:63, NY:120 (산척동/동탄7동)
-        // 실제 API 연동 시에는 인증키가 필요하므로, 여기서는 방장님이 바로 확인하실 수 있게 
-        // 기상청 포맷의 데이터를 시뮬레이션하여 7일치를 생성합니다.
         const days = ['일', '월', '화', '수', '목', '금', '토'];
         const now = getKSTDate();
         const mockWeather = Array.from({ length: 7 }).map((_, i) => {
-          const targetDate = new Date(now);
-          targetDate.setDate(now.getDate() + i);
-          return {
-            date: `${targetDate.getMonth()+1}/${targetDate.getDate()}`,
-            day: days[targetDate.getDay()],
-            tempMin: 12 + i,
-            tempMax: 22 + i,
-            sky: i % 3 === 0 ? '🌧️' : i % 2 === 0 ? '☁️' : '☀️',
-            rainProb: i % 3 === 0 ? '80%' : i % 2 === 0 ? '30%' : '0%'
-          };
+          const targetDate = new Date(now); targetDate.setDate(now.getDate() + i);
+          return { date: `${targetDate.getMonth()+1}/${targetDate.getDate()}`, day: days[targetDate.getDay()], tempMin: 12 + i, tempMax: 22 + i, sky: i % 3 === 0 ? '🌧️' : i % 2 === 0 ? '☁️' : '☀️', rainProb: i % 3 === 0 ? '80%' : i % 2 === 0 ? '30%' : '0%' };
         });
         setWeatherData(mockWeather);
-      } catch (e) { console.error("날씨 로드 실패", e); }
+      } catch (e) {}
     };
     fetchWeather();
   }, []);
@@ -279,33 +263,19 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
 
   return (
     <div className="flex flex-col h-full bg-slate-50 animate-in fade-in duration-500 pb-28">
-      {/* 🔝 상단 퀵 메뉴 영역 */}
       <div className="p-5 pb-0 space-y-3 shrink-0">
-         {/* 1. 레이크원 찾기 카드 */}
          <div onClick={() => setIsLakeOpen(true)} className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-4 text-white shadow-md flex items-center justify-between cursor-pointer active:scale-95 transition-transform">
             <div className="flex items-center gap-3"><div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm"><Building size={20} className="text-white"/></div><div><div className="text-[10px] font-black text-blue-200 mb-0.5 tracking-widest uppercase">B동 입구 헷갈릴 때!</div><div className="text-[15px] font-black tracking-tight">🏢 동탄 레이크원 출입구 찾기</div></div></div><Search size={20} className="text-blue-200 opacity-80" />
          </div>
-
-         {/* 2. 주간 날씨 카드 (동탄7동/산척동) */}
          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
-            <div className="flex justify-between items-center mb-3">
-               <h3 className="text-[13px] font-black text-slate-800 flex items-center gap-1.5">🌤️ 동탄7동(산척동) 주간 예보</h3>
-               <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">기상청 정보</span>
-            </div>
+            <div className="flex justify-between items-center mb-3"><h3 className="text-[13px] font-black text-slate-800 flex items-center gap-1.5">🌤️ 동탄7동(산척동) 주간 예보</h3><span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">기상청 정보</span></div>
             <div className="flex overflow-x-auto no-scrollbar gap-4 pb-1">
                {weatherData?.map((w, idx) => (
-                  <div key={idx} className="flex flex-col items-center min-w-[45px] shrink-0">
-                     <span className={`text-[10px] font-bold ${w.day === '일' ? 'text-rose-500' : w.day === '토' ? 'text-blue-500' : 'text-slate-400'}`}>{w.date}({w.day})</span>
-                     <span className="text-xl my-1">{w.sky}</span>
-                     <span className="text-[11px] font-black text-slate-700">{w.tempMax}°</span>
-                     <span className={`text-[9px] font-bold ${parseInt(w.rainProb) > 50 ? 'text-blue-500' : 'text-slate-300'}`}>{w.rainProb}</span>
-                  </div>
+                  <div key={idx} className="flex flex-col items-center min-w-[45px] shrink-0"><span className={`text-[10px] font-bold ${w.day === '일' ? 'text-rose-500' : w.day === '토' ? 'text-blue-500' : 'text-slate-400'}`}>{w.date}({w.day})</span><span className="text-xl my-1">{w.sky}</span><span className="text-[11px] font-black text-slate-700">{w.tempMax}°</span><span className={`text-[9px] font-bold ${parseInt(w.rainProb) > 50 ? 'text-blue-500' : 'text-slate-300'}`}>{w.rainProb}</span></div>
                ))}
             </div>
          </div>
       </div>
-
-      {/* 📋 정보방 리스트 영역 */}
       <div className="p-5 space-y-3">
         {list.length === 0 && <div className="py-20 text-center text-slate-400 font-bold text-sm bg-white rounded-2xl border border-dashed border-slate-200">등록된 실시간 정보가 없습니다.</div>}
         {[...list].sort((a,b)=>(b.isUrgent?1:0)-(a.isUrgent?1:0)).map(item => (
@@ -319,33 +289,23 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
           </div>
         ))}
       </div>
-
       <button onClick={handleOpenModal} className="fixed bottom-[110px] right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center z-40 active:scale-90"><Edit3 size={24}/></button>
-
-      {/* 레이크원 모달 (기존 동일) */}
       {isLakeOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[110] flex items-end justify-center p-0">
           <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => {setIsLakeOpen(false); setLakeRoom('');})} className="bg-white w-full max-w-md rounded-t-[2.5rem] p-6 pb-12 shadow-2xl flex flex-col border-t-8 border-indigo-600 relative animate-in slide-in-from-bottom duration-300">
-             <div className="w-14 h-1.5 bg-slate-300 rounded-full mx-auto mb-6 shrink-0"></div>
-             <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Building className="text-indigo-600" size={24}/> 레이크원 B동 찾기</h2><button onClick={() => {setIsLakeOpen(false); setLakeRoom('');}} className="bg-slate-100 text-slate-500 p-2.5 rounded-full"><X size={20}/></button></div>
-             <div className="space-y-4">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner"><label className="text-xs font-black text-slate-500 mb-2 block text-center">B동 도착 호수를 입력하세요</label><input type="text" inputMode="numeric" pattern="[0-9]*" value={lakeRoom} onChange={e=>setLakeRoom(e.target.value.replace(/[^0-9]/g, ''))} placeholder="예: 636" autoFocus className="w-full bg-white p-4 rounded-xl font-black text-4xl text-center outline-none border-2 border-slate-200 focus:border-indigo-500 text-slate-800 tracking-widest shadow-sm transition-all" /></div>
+             <div className="w-14 h-1.5 bg-slate-300 rounded-full mx-auto mb-6 shrink-0"></div><div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Building className="text-indigo-600" size={24}/> 레이크원 B동 찾기</h2><button onClick={() => {setIsLakeOpen(false); setLakeRoom('');}} className="bg-slate-100 text-slate-500 p-2.5 rounded-full"><X size={20}/></button></div>
+             <div className="space-y-4"><div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner"><label className="text-xs font-black text-slate-500 mb-2 block text-center">B동 도착 호수를 입력하세요</label><input type="text" inputMode="numeric" pattern="[0-9]*" value={lakeRoom} onChange={e=>setLakeRoom(e.target.value.replace(/[^0-9]/g, ''))} placeholder="예: 636" autoFocus className="w-full bg-white p-4 rounded-xl font-black text-4xl text-center outline-none border-2 border-slate-200 focus:border-indigo-500 text-slate-800 tracking-widest shadow-sm transition-all" /></div>
                 {lakeRoom && getLakeOneResult(lakeRoom) && (<div className={`p-6 rounded-2xl border-2 text-center shadow-lg animate-in zoom-in-95 duration-200 ${getLakeOneResult(lakeRoom).type === 'B_CENTER' ? 'bg-blue-600 border-blue-700 text-white' : getLakeOneResult(lakeRoom).type === 'B_NORMAL' ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-slate-100 border-slate-300 text-slate-600'}`}><div className="text-[12px] font-black opacity-80 mb-1 uppercase tracking-widest">{lakeRoom}호의 위치는</div><div className="text-2xl font-black tracking-tight">{getLakeOneResult(lakeRoom).label}</div></div>)}
              </div>
           </div>
         </div>
       )}
-
-      {/* 정보방 글쓰기 모달 (기존 동일) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0">
           <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={(e) => handleTouchEnd(e, () => setIsModalOpen(false))} className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[95vh] border-t-8 border-blue-500 mt-10 animate-in slide-in-from-bottom duration-300">
-            <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 shrink-0"></div>
-            <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-black text-slate-900 flex items-center gap-1.5"><Megaphone size={18} className="text-blue-500"/> 현장 제보</h2><button onClick={() => setIsModalOpen(false)} className="bg-white text-slate-500 p-2 rounded-full"><X size={18}/></button></div>
+            <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 shrink-0"></div><div className="flex justify-between items-center mb-4"><h2 className="text-lg font-black text-slate-900 flex items-center gap-1.5"><Megaphone size={18} className="text-blue-500"/> 현장 제보</h2><button onClick={() => setIsModalOpen(false)} className="bg-white text-slate-500 p-2 rounded-full"><X size={18}/></button></div>
             <div className="overflow-y-auto no-scrollbar space-y-4 pb-2">
-               <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
-                  {categories.map(cat => (<button key={cat} type="button" onClick={() => {setCategory(cat); setQuickStatus(''); setPlace(''); setIsUrgent(cat === '🚨단속'); }} className={`px-3 py-2 rounded-xl text-[11px] font-black shrink-0 ${category === cat ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}>{cat}</button>))}
-               </div>
+               <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">{categories.map(cat => (<button key={cat} type="button" onClick={() => {setCategory(cat); setQuickStatus(''); setPlace(''); setIsUrgent(cat === '🚨단속'); }} className={`px-3 py-2 rounded-xl text-[11px] font-black shrink-0 ${category === cat ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}>{cat}</button>))}</div>
                {category !== '💬기타' && (
                   <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 space-y-3">
                      <div><label className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1">{category === '⏳조리지연' ? <Store size={12}/> : <MapPin size={12}/>} {category === '⏳조리지연' ? '매장명' : '발생 위치'}</label><input type="text" value={place} onChange={e=>setPlace(e.target.value)} placeholder={category === '⏳조리지연' ? '예: 교촌치킨 동탄역점' : '예: 동탄역 사거리'} className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400" />
@@ -357,10 +317,7 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
                )}
                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                   <textarea value={details} onChange={e=>setDetails(e.target.value)} placeholder="추가 내용 (선택)" rows="2" className="w-full bg-slate-50 p-3 rounded-xl font-bold text-sm outline-none border border-slate-100 focus:border-blue-400 resize-none mb-3" />
-                  <label className="flex items-center gap-2 p-3 bg-rose-50 rounded-xl border border-rose-200 cursor-pointer active:scale-95 transition-transform">
-                     <input type="checkbox" checked={isUrgent} onChange={e => setIsUrgent(e.target.checked)} className="w-4 h-4 accent-rose-600" />
-                     <span className="text-[12px] font-black text-rose-700">🚨 메인 전광판 긴급공지로 동시 등록</span>
-                  </label>
+                  <label className="flex items-center gap-2 p-3 bg-rose-50 rounded-xl border border-rose-200 cursor-pointer active:scale-95 transition-transform"><input type="checkbox" checked={isUrgent} onChange={e => setIsUrgent(e.target.checked)} className="w-4 h-4 accent-rose-600" /><span className="text-[12px] font-black text-rose-700">🚨 메인 전광판 긴급공지로 동시 등록</span></label>
                </div>
                <button onClick={handleSend} disabled={category !== '💬기타' && !place.trim()} className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-base active:scale-95 shadow-lg disabled:opacity-50 transition-transform">제보 완료 🚀</button>
             </div>
@@ -372,44 +329,28 @@ function InfoBoardView({ user, userData, openModalTrigger, resetModalTrigger }) 
 }
 
 // === [4. 서브 뷰: 운행 현황 (StatusView)] ===
-
 function StatusView({ allUsers }) {
   const active = allUsers.filter(u => u.isRiding && !u.isStealth);
   const stealthUsers = allUsers.filter(u => u.isRiding && u.isStealth);
   const inactiveNormal = allUsers.filter(u => !u.isRiding && !u.isStealth);
-  const inactive = [...inactiveNormal, ...stealthUsers]; // 💡 스텔스는 철저하게 휴식중으로 위장
+  const inactive = [...inactiveNormal, ...stealthUsers]; 
 
   return (
     <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
       <div className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm">
-        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
-           <span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중 현황</span>
-           <span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span>
-        </h2>
+        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between"><span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중 현황</span><span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span></h2>
         <div className="grid grid-cols-2 gap-2.5">
           {active.map(r => (
-            <div key={r.uid} className="p-3 rounded-[1rem] border border-green-200 bg-green-50 shadow-sm flex flex-col gap-1 transition-all">
-               <div className="flex items-center gap-1.5"><span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span></span><span className="text-[11px] font-black text-green-700">🟢 운행중</span></div>
-               <div className="text-[13px] font-black text-slate-800 truncate mt-0.5">{r.nickname}</div>
-               <div className="text-[10px] font-bold text-slate-500 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div>
-            </div>
+            <div key={r.uid} className="p-3 rounded-[1rem] border border-green-200 bg-green-50 shadow-sm flex flex-col gap-1 transition-all"><div className="flex items-center gap-1.5"><span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span></span><span className="text-[11px] font-black text-green-700">🟢 운행중</span></div><div className="text-[13px] font-black text-slate-800 truncate mt-0.5">{r.nickname}</div><div className="text-[10px] font-bold text-slate-500 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div></div>
           ))}
           {active.length === 0 && <div className="col-span-2 text-center py-4 text-xs font-bold text-slate-400">현재 운행 중인 멤버가 없습니다.</div>}
         </div>
       </div>
       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 opacity-80 shadow-sm">
-        <h2 className="text-xs font-black text-slate-400 mb-4 flex items-center justify-between">
-          <span className="flex items-center gap-1.5"><Users size={16}/> 휴식 중</span>
-          {/* 💡 헤더에만 스텔스 존재 여부 알림 */}
-          <span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px]">기본 {inactiveNormal.length}명 + 🥷스텔스 {stealthUsers.length}명</span>
-        </h2>
+        <h2 className="text-xs font-black text-slate-400 mb-4 flex items-center justify-between"><span className="flex items-center gap-1.5"><Users size={16}/> 휴식 중</span><span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px]">기본 {inactiveNormal.length}명 + 🥷스텔스 {stealthUsers.length}명</span></h2>
         <div className="grid grid-cols-2 gap-2.5">
           {inactive.map(r => (
-            <div key={r.uid} className="p-3 rounded-[1rem] border border-slate-200 bg-slate-50 flex flex-col gap-1">
-               <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-yellow-400"></span><span className="text-[11px] font-black text-slate-500">🟡 휴식중</span></div>
-               <div className="text-[13px] font-black text-slate-600 truncate mt-0.5">{r.nickname}</div>
-               <div className="text-[10px] font-bold text-slate-400 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div>
-            </div>
+            <div key={r.uid} className="p-3 rounded-[1rem] border border-slate-200 bg-slate-50 flex flex-col gap-1"><div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-yellow-400"></span><span className="text-[11px] font-black text-slate-500">🟡 휴식중</span></div><div className="text-[13px] font-black text-slate-600 truncate mt-0.5">{r.nickname}</div><div className="text-[10px] font-bold text-slate-400 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div></div>
           ))}
         </div>
       </div>
@@ -418,7 +359,6 @@ function StatusView({ allUsers }) {
 }
 
 // === [5. 인증 화면 (LoginScreen, RegisterScreen)] ===
-
 function LoginScreen({ onLogin, onGoToRegister }) {
   const [loginId, setLoginId] = useState(''); const [password, setPassword] = useState(''); const [rememberMe, setRememberMe] = useState(true); const [showInstallGuide, setShowInstallGuide] = useState(false);
   useEffect(() => { const savedId = localStorage.getItem('baesamo_saved_id'); const savedPw = localStorage.getItem('baesamo_saved_pw'); if (savedId && savedPw) { setLoginId(savedId); setPassword(savedPw); setRememberMe(true); } }, []);
@@ -439,7 +379,7 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
 }
 
 // === [6. 메인 뷰: 배달 수익 관리 (DeliveryView)] ===
-// 💡 [추가] isReadOnly props 추가 (가면 쓰기 상태 확인용)
+// 💡 isReadOnly props 추가 (가면 쓰기 상태 확인용)
 function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth, globalNotice, onNoticeClick, isReadOnly }) {
   const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
   const [deliverySubTab, setDeliverySubTab] = useState('daily');
@@ -459,12 +399,11 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [selectedDailySummary, setSelectedDailySummary] = useState(null);
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingDeliveryShift, setEditingDeliveryShift] = useState(null);
-  
   const [showCloseChoice, setShowCloseChoice] = useState(false);
   
   const tabRef = useRef(null);
 
-  // 💡 [변경] 읽기 전용 상태가 아닐 때만 '정훈/현아' 라벨 적용
+  // 💡 읽기 전용 상태가 아닐 때만 '정훈/현아' 라벨 적용
   const isViewingSelf = !isReadOnly;
   const MAIN_LABEL = (user.uid === MASTER_USER_ID && isViewingSelf) ? '정훈' : (userData?.nickname || '메인');
   const SUB_LABEL = (user.uid === MASTER_USER_ID && isViewingSelf) ? '현아' : '투폰(서브)';
@@ -558,7 +497,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const yearlyMainAmt = yearlyItems.filter(d => d.device === 'main').reduce((a,b)=>a+(b.amount||0), 0);
   const yearlySubAmt = yearlyItems.filter(d => d.device === 'sub').reduce((a,b)=>a+(b.amount||0), 0);
 
-  // 🚀 [복구 완료] 타임 전체 수정 함수
+  // 🚀 전체 타임 수정 함수
   const openEditShiftForm = (shift) => {
     let hasSubData = shift.items.some(i => i.device === 'sub');
     const form = { ...emptyForm, date: shift.date, startTime: shift.startTime || '', endTime: shift.endTime || '', useTwoPhones: user.uid === MASTER_USER_ID || hasSubData };
@@ -583,8 +522,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const handleDeliverySubmit = async (e) => {
     e.preventDefault(); if (!user) return;
     const timestamp = new Date().toISOString(); 
-    const adds = [];
-    const hyunaAdds = [];
+    const adds = []; const hyunaAdds = [];
 
     if (!editingDeliveryShift && timerActive) { handleEndDelivery(); }
 
@@ -598,10 +536,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          adds.push({ userId: user.uid, date: deliveryFormData.date, device, platform, amount: finalAmt, count: finalCnt, startTime: deliveryFormData.startTime, endTime: deliveryFormData.endTime, updatedAt: timestamp, nickname: userData.nickname }); 
          if (user.uid === MASTER_USER_ID) {
             const mappedName = device === 'main' ? '정훈' : '현아';
-            hyunaAdds.push({
-                earner: mappedName, date: deliveryFormData.date, platform, amount: finalAmt, count: finalCnt,
-                startTime: deliveryFormData.startTime, endTime: deliveryFormData.endTime, updatedAt: timestamp, updatedBy: '정훈'
-            });
+            hyunaAdds.push({ earner: mappedName, date: deliveryFormData.date, platform, amount: finalAmt, count: finalCnt, startTime: deliveryFormData.startTime, endTime: deliveryFormData.endTime, updatedAt: timestamp, updatedBy: '정훈' });
          }
       }
     };
@@ -659,11 +594,9 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
 
   const handleCloseDeliveryModal = () => {
      if (editingDeliveryShift) { 
-         if(window.confirm("수정 중인 내용을 취소하시겠습니까?")) setIsDeliveryModalOpen(false); 
+         if(window.confirm("수정 중인 내용을 취소하시겠습니까?")) { setIsDeliveryModalOpen(false); setEditingDeliveryShift(null); }
      } 
-     else if (timerActive) { 
-         setShowCloseChoice(true);
-     } 
+     else if (timerActive) { setShowCloseChoice(true); } 
      else { 
          if (window.confirm("창을 닫으시겠습니까?\n(입력한 내용은 임시 보관함에 유지됩니다)")) { 
              setIsDeliveryModalOpen(false); 
@@ -677,23 +610,9 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   };
 
   const handleFinalExit = async (type) => {
-    if (type === 'CONTINUE') {
-      setShowCloseChoice(false);
-      setIsDeliveryModalOpen(false); 
-    } else if (type === 'LATER') {
-      await handleEndDelivery();
-      const recoveryData = { formData: deliveryFormData, splitQueue: splitQueue };
-      localStorage.setItem('baesamoRecoveryShift', JSON.stringify(recoveryData));
-      setRecoveryShift(recoveryData);
-      setIsDeliveryModalOpen(false);
-      setShowCloseChoice(false);
-    } else if (type === 'NONE') {
-      await handleEndDelivery();
-      localStorage.removeItem('baesamoRecoveryShift');
-      setRecoveryShift(null);
-      setIsDeliveryModalOpen(false);
-      setShowCloseChoice(false);
-    }
+    if (type === 'CONTINUE') { setShowCloseChoice(false); setIsDeliveryModalOpen(false); } 
+    else if (type === 'LATER') { await handleEndDelivery(); const recoveryData = { formData: deliveryFormData, splitQueue: splitQueue }; localStorage.setItem('baesamoRecoveryShift', JSON.stringify(recoveryData)); setRecoveryShift(recoveryData); setIsDeliveryModalOpen(false); setShowCloseChoice(false); } 
+    else if (type === 'NONE') { await handleEndDelivery(); localStorage.removeItem('baesamoRecoveryShift'); setRecoveryShift(null); setIsDeliveryModalOpen(false); setShowCloseChoice(false); }
   };
 
   const NetDiffInfo = ({ device, platform, inputAmt, inputCnt, date }) => {
@@ -707,177 +626,23 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
 
   return (
     <div className="flex flex-col gap-2 pb-8 pt-1 animate-in fade-in duration-500 text-slate-800 px-5">
+      <style>{`@keyframes custom-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-custom-scroll { display: flex; width: max-content; animation: custom-scroll 12s linear infinite; }`}</style>
       
-      <style>{`
-        @keyframes custom-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } 
-        .animate-custom-scroll { display: flex; width: max-content; animation: custom-scroll 12s linear infinite; }
-      `}</style>
-      
-      <div className="mt-2">
-        <div onClick={!isReadOnly ? onNoticeClick : undefined} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 overflow-hidden ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}>
-          <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}><AlertCircle size={18}/></div>
-          <div className={`flex-1 min-w-0 font-black text-[13px] overflow-hidden ${displayNotice ? 'text-rose-600' : 'text-slate-400'}`}>
-            {displayNotice ? ( 
-               <div className="animate-custom-scroll gap-8 pt-0.5">
-                  <span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span>
-               </div> 
-            ) : ( <div className="truncate w-full pt-0.5">{defaultNotice}</div> )}
-          </div>
-          <Edit3 size={14} className="text-slate-300 shrink-0"/>
-        </div>
-      </div>
+      <div className="mt-2"><div onClick={!isReadOnly ? onNoticeClick : undefined} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 overflow-hidden ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}><div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}><AlertCircle size={18}/></div><div className={`flex-1 min-w-0 font-black text-[13px] overflow-hidden ${displayNotice ? 'text-rose-600' : 'text-slate-400'}`}>{displayNotice ? ( <div className="animate-custom-scroll gap-8 pt-0.5"><span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span><span>{displayNotice}</span></div> ) : ( <div className="truncate w-full pt-0.5">{defaultNotice}</div> )}</div><Edit3 size={14} className="text-slate-300 shrink-0"/></div></div>
 
-      {recoveryShift && !timerActive && !isReadOnly && (
-         <div className="bg-red-50 border border-red-200 rounded-2xl p-3 shadow-sm flex flex-col gap-2 animate-in slide-in-from-top-2 mt-2">
-            <div className="flex items-center gap-2"><AlertCircle size={16} className="text-red-600" /><span className="text-xs font-black text-red-700">저장 안 된 마감 기록이 있습니다!</span></div>
-            <div className="flex gap-2 justify-end">
-                <button onClick={() => { if(window.confirm('임시 기록을 영구 삭제하시겠습니까?')) { localStorage.removeItem('baesamoRecoveryShift'); setRecoveryShift(null); } }} className="bg-white text-red-500 border border-red-200 text-[10px] px-3 py-1.5 rounded-lg font-bold shadow-sm active:scale-95">삭제</button>
-                <button onClick={() => { setDeliveryFormData(recoveryShift.formData); setSplitQueue(recoveryShift.splitQueue || []); setIsDeliveryModalOpen(true); }} className="bg-red-600 text-white text-xs px-4 py-1.5 rounded-lg font-black shadow-md active:scale-95">마감 이어쓰기 🚀</button>
-            </div>
-         </div>
-      )}
+      {recoveryShift && !timerActive && !isReadOnly && (<div className="bg-red-50 border border-red-200 rounded-2xl p-3 shadow-sm flex flex-col gap-2 animate-in slide-in-from-top-2 mt-2"><div className="flex items-center gap-2"><AlertCircle size={16} className="text-red-600" /><span className="text-xs font-black text-red-700">저장 안 된 마감 기록이 있습니다!</span></div><div className="flex gap-2 justify-end"><button onClick={() => { if(window.confirm('임시 기록을 영구 삭제하시겠습니까?')) { localStorage.removeItem('baesamoRecoveryShift'); setRecoveryShift(null); } }} className="bg-white text-red-500 border border-red-200 text-[10px] px-3 py-1.5 rounded-lg font-bold shadow-sm active:scale-95">삭제</button><button onClick={() => { setDeliveryFormData(recoveryShift.formData); setSplitQueue(recoveryShift.splitQueue || []); setIsDeliveryModalOpen(true); }} className="bg-red-600 text-white text-xs px-4 py-1.5 rounded-lg font-black shadow-md active:scale-95">마감 이어쓰기 🚀</button></div></div>)}
 
-      {/* 💡 [변경] 읽기 전용 상태일 때는 타이머 뷰 숨기기 */}
       {!isReadOnly && (
-        <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-1 ${timerActive ? (userData?.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2.5 ml-1 shrink-0">
-              <div className={`p-3 rounded-2xl shrink-0 ${timerActive ? 'bg-white/20 text-white animate-pulse shadow-inner' : 'bg-slate-700 text-slate-300 shadow-inner'}`}>
-                 {userData?.isStealth ? <Ghost size={24} /> : <Timer size={24} />}
-              </div>
-              <div className="flex flex-col justify-center">
-                <div className={`text-[10px] font-black flex items-center mb-0.5 whitespace-nowrap ${timerActive ? 'text-blue-100' : 'text-slate-200'}`}>
-                  {userData?.isStealth ? 'Stealth Mode' : 'Live Tracking'}
-                  {timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 mr-1.5 ${userData?.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}
-                  {userData?.trackingStartTime && timerActive && ( <span className="text-[9px] text-blue-100 font-bold bg-white/10 px-1.5 py-0.5 rounded shadow-sm border border-blue-300/30 tracking-tight">{formatTimeStr(new Date(userData.trackingStartTime))} 시작</span> )}
-                </div>
-                <div className={`text-[30px] font-black tracking-tighter leading-none whitespace-nowrap text-white drop-shadow-md`}>
-                   {timerActive && userData?.trackingStartTime ? `${Math.floor(elapsedSeconds/3600).toString().padStart(2,'0')}:${String(Math.floor((elapsedSeconds%3600)/60)).padStart(2,'0')}:${String(elapsedSeconds%60).padStart(2,'0')}` : '00:00:00'}
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 items-end shrink-0">
-               <button onClick={() => { 
-                 if(timerActive) {
-                   const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow;
-                   if (userData?.trackingStartTime) { const startObj = new Date(userData.trackingStartTime); if (!isNaN(startObj.getTime())) startStr = formatTimeStr(startObj); }
-                   setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true);
-                 } else { handleStartDelivery(); }
-               }} className={`px-4 py-2.5 rounded-[1rem] font-black text-[13px] shadow-md transition-all active:scale-95 whitespace-nowrap shrink-0 ${timerActive ? 'bg-white text-blue-700 hover:bg-blue-50' : 'bg-white/20 text-white border border-white/20 hover:bg-white/30'}`}>
-                 {timerActive ? '마감하기' : '배달 시작'}
-               </button>
-               {timerActive && (
-                 <button onClick={toggleStealth} className={`whitespace-nowrap shrink-0 text-[9px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData?.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
-                    <Ghost size={12}/> {userData?.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
-                 </button>
-               )}
-            </div>
-          </div>
-        </div>
+        <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-1 ${timerActive ? (userData?.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}><div className="flex justify-between items-center"><div className="flex items-center gap-2.5 ml-1 shrink-0"><div className={`p-3 rounded-2xl shrink-0 ${timerActive ? 'bg-white/20 text-white animate-pulse shadow-inner' : 'bg-slate-700 text-slate-300 shadow-inner'}`}>{userData?.isStealth ? <Ghost size={24} /> : <Timer size={24} />}</div><div className="flex flex-col justify-center"><div className={`text-[10px] font-black flex items-center mb-0.5 whitespace-nowrap ${timerActive ? 'text-blue-100' : 'text-slate-200'}`}>{userData?.isStealth ? 'Stealth Mode' : 'Live Tracking'}{timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 mr-1.5 ${userData?.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}{userData?.trackingStartTime && timerActive && ( <span className="text-[9px] text-blue-100 font-bold bg-white/10 px-1.5 py-0.5 rounded shadow-sm border border-blue-300/30 tracking-tight">{formatTimeStr(new Date(userData.trackingStartTime))} 시작</span> )}</div><div className={`text-[30px] font-black tracking-tighter leading-none whitespace-nowrap text-white drop-shadow-md`}>{timerActive && userData?.trackingStartTime ? `${Math.floor(elapsedSeconds/3600).toString().padStart(2,'0')}:${String(Math.floor((elapsedSeconds%3600)/60)).padStart(2,'0')}:${String(elapsedSeconds%60).padStart(2,'0')}` : '00:00:00'}</div></div></div><div className="flex flex-col gap-2 items-end shrink-0"><button onClick={() => { if(timerActive) { const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow; if (userData?.trackingStartTime) { const startObj = new Date(userData.trackingStartTime); if (!isNaN(startObj.getTime())) startStr = formatTimeStr(startObj); } setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true); } else { handleStartDelivery(); } }} className={`px-4 py-2.5 rounded-[1rem] font-black text-[13px] shadow-md transition-all active:scale-95 whitespace-nowrap shrink-0 ${timerActive ? 'bg-white text-blue-700 hover:bg-blue-50' : 'bg-white/20 text-white border border-white/20 hover:bg-white/30'}`}>{timerActive ? '마감하기' : '배달 시작'}</button>{timerActive && (<button onClick={toggleStealth} className={`whitespace-nowrap shrink-0 text-[9px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData?.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}><Ghost size={12}/> {userData?.isStealth ? '스텔스 끄기' : '스텔스 켜기'}</button>)}</div></div></div>
       )}
 
-      <div className="mb-1 mt-1">
-        {isYearlySummaryOpen ? (
-          <div className="bg-gradient-to-br from-slate-700 to-slate-800 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden mb-1 animate-in fade-in" onClick={() => setIsYearlySummaryOpen(false)}>
-            <div className="flex justify-between items-end mb-4 relative z-10 cursor-pointer">
-              <div className="flex-1 min-w-0"><div className="text-[12px] font-black opacity-90 mb-1 flex items-center gap-1 text-slate-300"><ChevronUp size={16}/> {selectedYear}년 누적 수익</div><div className="inline-flex items-baseline bg-black/20 px-2 py-1.5 rounded-2xl border border-white/10 shadow-inner mt-1 max-w-full overflow-hidden"><span className="text-[24px] font-black tracking-tighter text-white leading-none truncate">{formatLargeMoney(yearlyMetrics.totalAmt)}</span><span className="text-[11px] ml-0.5 font-bold text-slate-300 shrink-0">원</span></div></div>
-              <div className="shrink-0 text-right"><div className="flex flex-col items-end gap-1.5 text-[9px] font-bold opacity-90 pb-1"><span className="flex gap-1.5 text-slate-100"><span>총 {formatLargeMoney(yearlyMetrics.totalCnt)}건</span><span>{yearlyMetrics.durationStr} 근무</span></span><span className="flex gap-1.5 text-slate-300"><span>평단 {formatLargeMoney(yearlyMetrics.perDelivery)}원</span><span>시급 {formatLargeMoney(yearlyMetrics.hourlyRate)}원</span></span></div></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-3 relative z-10">
-               <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyMainAmt)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlySubAmt)}원</span></div></div>
-               <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#4cd1cc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyItems.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0))}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyItems.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0))}원</span></div></div>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm flex justify-between items-center cursor-pointer text-slate-700" onClick={() => setIsYearlySummaryOpen(true)}>
-             <span className="text-sm font-black flex items-center gap-1.5">🗓️ {selectedYear}년 누적 수익 확인</span>
-             <ChevronDownSquare size={18} className="text-slate-400" />
-          </div>
-        )}
-      </div>
+      <div className="mb-1 mt-1">{isYearlySummaryOpen ? (<div className="bg-gradient-to-br from-slate-700 to-slate-800 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden mb-1 animate-in fade-in" onClick={() => setIsYearlySummaryOpen(false)}><div className="flex justify-between items-end mb-4 relative z-10 cursor-pointer"><div className="flex-1 min-w-0"><div className="text-[12px] font-black opacity-90 mb-1 flex items-center gap-1 text-slate-300"><ChevronUp size={16}/> {selectedYear}년 누적 수익</div><div className="inline-flex items-baseline bg-black/20 px-2 py-1.5 rounded-2xl border border-white/10 shadow-inner mt-1 max-w-full overflow-hidden"><span className="text-[24px] font-black tracking-tighter text-white leading-none truncate">{formatLargeMoney(yearlyMetrics.totalAmt)}</span><span className="text-[11px] ml-0.5 font-bold text-slate-300 shrink-0">원</span></div></div><div className="shrink-0 text-right"><div className="flex flex-col items-end gap-1.5 text-[9px] font-bold opacity-90 pb-1"><span className="flex gap-1.5 text-slate-100"><span>총 {formatLargeMoney(yearlyMetrics.totalCnt)}건</span><span>{yearlyMetrics.durationStr} 근무</span></span><span className="flex gap-1.5 text-slate-300"><span>평단 {formatLargeMoney(yearlyMetrics.perDelivery)}원</span><span>시급 {formatLargeMoney(yearlyMetrics.hourlyRate)}원</span></span></div></div></div><div className="grid grid-cols-2 gap-2 mt-3 relative z-10"><div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyMainAmt)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlySubAmt)}원</span></div></div><div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#4cd1cc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyItems.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0))}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-300">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(yearlyItems.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0))}원</span></div></div></div></div>) : (<div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm flex justify-between items-center cursor-pointer text-slate-700" onClick={() => setIsYearlySummaryOpen(true)}><span className="text-sm font-black flex items-center gap-1.5">🗓️ {selectedYear}년 누적 수익 확인</span><ChevronDownSquare size={18} className="text-slate-400" /></div>)}</div>
 
-      <div className="flex gap-2 mb-1">
-        <button onClick={() => { setIsDeliverySummaryOpen(true); setIsPendingSummaryOpen(false); setIsYearlySummaryOpen(false); }} className={`flex-1 py-3.5 rounded-2xl border text-[13px] font-black transition-colors shadow-sm flex justify-center items-center gap-1.5 ${isDeliverySummaryOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200'}`}>🏍️ {selectedMonth}월 수익 {isDeliverySummaryOpen ? '∧' : '∨'}</button>
-        <button onClick={() => { setIsPendingSummaryOpen(true); setIsDeliverySummaryOpen(false); setIsYearlySummaryOpen(false); }} className={`flex-1 py-3.5 rounded-2xl border text-[13px] font-black transition-colors shadow-sm flex justify-center items-center gap-1.5 ${isPendingSummaryOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200'}`}>💰 정산 예정금 {isPendingSummaryOpen ? '∧' : '∨'}</button>
-      </div>
+      <div className="flex gap-2 mb-1"><button onClick={() => { setIsDeliverySummaryOpen(true); setIsPendingSummaryOpen(false); setIsYearlySummaryOpen(false); }} className={`flex-1 py-3.5 rounded-2xl border text-[13px] font-black transition-colors shadow-sm flex justify-center items-center gap-1.5 ${isDeliverySummaryOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200'}`}>🏍️ {selectedMonth}월 수익 {isDeliverySummaryOpen ? '∧' : '∨'}</button><button onClick={() => { setIsPendingSummaryOpen(true); setIsDeliverySummaryOpen(false); setIsYearlySummaryOpen(false); }} className={`flex-1 py-3.5 rounded-2xl border text-[13px] font-black transition-colors shadow-sm flex justify-center items-center gap-1.5 ${isPendingSummaryOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200'}`}>💰 정산 예정금 {isPendingSummaryOpen ? '∧' : '∨'}</button></div>
 
-      <div>
-        {isDeliverySummaryOpen && (() => {
-            const baeminTotal = filteredDailyDeliveries.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0);
-            const coupangTotal = filteredDailyDeliveries.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0);
-            const goal = userData?.deliveryGoals?.[currentMonthKey] || 0;
-            const pct = goal > 0 ? Math.min(100, (deliveryFilteredTotal / goal) * 100) : 0;
-            const timeRatio = ((getKSTDate().getDate()) / new Date(selectedYear, selectedMonth, 0).getDate()) * 100;
-            const remainingAmt = Math.max(0, goal - deliveryFilteredTotal);
-            const remainingDays = new Date(selectedYear, selectedMonth, 0).getDate() - getKSTDate().getDate();
-            const dailyReq = remainingDays > 0 ? Math.ceil(remainingAmt / remainingDays) : 0;
+      <div>{isDeliverySummaryOpen && (() => { const baeminTotal = filteredDailyDeliveries.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0); const coupangTotal = filteredDailyDeliveries.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0); const goal = userData?.deliveryGoals?.[currentMonthKey] || 0; const pct = goal > 0 ? Math.min(100, (deliveryFilteredTotal / goal) * 100) : 0; const timeRatio = ((getKSTDate().getDate()) / new Date(selectedYear, selectedMonth, 0).getDate()) * 100; const remainingAmt = Math.max(0, goal - deliveryFilteredTotal); const remainingDays = new Date(selectedYear, selectedMonth, 0).getDate() - getKSTDate().getDate(); const dailyReq = remainingDays > 0 ? Math.ceil(remainingAmt / remainingDays) : 0; return ( <div className="bg-gradient-to-br from-blue-700 to-indigo-800 rounded-[2rem] p-5 text-white shadow-lg relative overflow-hidden mb-2 animate-in slide-in-from-top-2"><div className="flex flex-col mb-4 relative z-10" onClick={() => setIsDeliverySummaryOpen(false)}><div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1 cursor-pointer"><ChevronUp size={14}/> {selectedMonth}월 수익 현황</div><div className="flex justify-between items-end cursor-pointer"><div className="text-[32px] font-black tracking-tighter leading-none">{formatLargeMoney(deliveryFilteredTotal)}<span className="text-base ml-1 opacity-80 font-bold">원</span></div><div className="flex flex-col items-end gap-1.5 text-[10px] font-bold opacity-90 pb-1"><span className="flex gap-2"><span>총 {formatLargeMoney(deliveryFilteredCount)}건</span><span>{monthlyMetrics.durationStr} 근무</span></span><span className="flex gap-2 text-blue-200"><span>평단 {formatLargeMoney(deliveryAvgPerDelivery)}원</span><span>시급 {formatLargeMoney(monthlyMetrics.hourlyRate)}원</span></span></div></div></div>{goal > 0 && (<div className="mb-4 relative z-10"><div className="w-full bg-slate-900/40 rounded-full h-[24px] relative overflow-hidden border border-white/20"><div className="bg-blue-400 h-full transition-all duration-1000 shadow-[0_0_10px_rgba(96,165,250,0.8)]" style={{width: `${pct}%`}}></div><div className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-white drop-shadow-md">🎯 목표 {formatCompactMoney(goal)} | {pct.toFixed(1)}% 달성</div><div className="absolute top-0 bottom-0 w-[2px] bg-rose-400 z-20 shadow-[0_0_5px_rgba(251,113,133,1)]" style={{left: `${timeRatio}%`}}></div></div>{remainingAmt > 0 && remainingDays > 0 && (<div className="mt-1.5 text-[10px] font-bold text-blue-100 text-center">남은 목표를 위해 하루 평균 <span className="text-rose-300 font-black">{formatLargeMoney(dailyReq)}</span>원 필요</div>)}</div>)}<div className="grid grid-cols-2 gap-2 relative z-10"><div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(filteredMainItems.reduce((a,b)=>a+(b.amount||0),0))}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(filteredSubItems.reduce((a,b)=>a+(b.amount||0),0))}원</span></div></div><div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#4cd1cc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(baeminTotal)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(coupangTotal)}원</span></div></div></div></div> ); })()}</div>
 
-            return (
-              <div className="bg-gradient-to-br from-blue-700 to-indigo-800 rounded-[2rem] p-5 text-white shadow-lg relative overflow-hidden mb-2 animate-in slide-in-from-top-2">
-                <div className="flex flex-col mb-4 relative z-10" onClick={() => setIsDeliverySummaryOpen(false)}>
-                    <div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1 cursor-pointer"><ChevronUp size={14}/> {selectedMonth}월 수익 현황</div>
-                    <div className="flex justify-between items-end cursor-pointer">
-                       <div className="text-[32px] font-black tracking-tighter leading-none">{formatLargeMoney(deliveryFilteredTotal)}<span className="text-base ml-1 opacity-80 font-bold">원</span></div>
-                       <div className="flex flex-col items-end gap-1.5 text-[10px] font-bold opacity-90 pb-1">
-                          <span className="flex gap-2"><span>총 {formatLargeMoney(deliveryFilteredCount)}건</span><span>{monthlyMetrics.durationStr} 근무</span></span>
-                          <span className="flex gap-2 text-blue-200"><span>평단 {formatLargeMoney(deliveryAvgPerDelivery)}원</span><span>시급 {formatLargeMoney(monthlyMetrics.hourlyRate)}원</span></span>
-                       </div>
-                    </div>
-                </div>
-
-                {goal > 0 && (
-                   <div className="mb-4 relative z-10">
-                     <div className="w-full bg-slate-900/40 rounded-full h-[24px] relative overflow-hidden border border-white/20">
-                         <div className="bg-blue-400 h-full transition-all duration-1000 shadow-[0_0_10px_rgba(96,165,250,0.8)]" style={{width: `${pct}%`}}></div>
-                         <div className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-white drop-shadow-md">🎯 목표 {formatCompactMoney(goal)} | {pct.toFixed(1)}% 달성</div>
-                         <div className="absolute top-0 bottom-0 w-[2px] bg-rose-400 z-20 shadow-[0_0_5px_rgba(251,113,133,1)]" style={{left: `${timeRatio}%`}}></div>
-                     </div>
-                     {remainingAmt > 0 && remainingDays > 0 && (<div className="mt-1.5 text-[10px] font-bold text-blue-100 text-center">남은 목표를 위해 하루 평균 <span className="text-rose-300 font-black">{formatLargeMoney(dailyReq)}</span>원 필요</div>)}
-                   </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2 relative z-10">
-                   <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(filteredMainItems.reduce((a,b)=>a+(b.amount||0),0))}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(filteredSubItems.reduce((a,b)=>a+(b.amount||0),0))}원</span></div></div>
-                   <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#4cd1cc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(baeminTotal)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-blue-200">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(coupangTotal)}원</span></div></div>
-                </div>
-              </div>
-            );
-        })()}
-      </div>
-
-      {isPendingSummaryOpen && (() => {
-        const upcomingToDisplay = upcomingPaydays.slice(0, 2);
-        return (
-            <div className="grid grid-cols-2 gap-2 mb-2 animate-in slide-in-from-top-2">
-              {upcomingToDisplay.length === 0 ? (
-                <div className="col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-slate-200 text-center text-slate-500 text-sm font-black">입금 대기 중인 정산금이 없습니다.</div>
-              ) : (
-                upcomingToDisplay.map((pd, idx) => {
-                  const group = pendingByPayday[pd]; const metrics = getGroupMetrics(group.items);
-                  const baeminTot = group.items.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0);
-                  const coupangTot = group.items.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0);
-
-                  return (
-                    <div key={pd} onClick={() => setSelectedWeeklySummary(pd)} className={`rounded-[2rem] p-5 shadow-lg border bg-gradient-to-br from-teal-700 to-cyan-800 border-teal-600 flex flex-col justify-between cursor-pointer active:scale-95 transition-transform text-white relative overflow-hidden col-span-2`}>
-                      <Bike className="absolute -right-2 -bottom-2 w-32 h-32 opacity-10 rotate-12" fill="white" />
-                      <div className="flex flex-col mb-4 relative z-10">
-                          <div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1"><span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm border ${idx === 0 ? 'bg-white text-teal-700 border-white' : 'bg-teal-600 text-white border-teal-500'}`}>{idx === 0 ? '이번주' : '다음주'}</span><span className="text-teal-50">{pd.slice(5).replace('-','/')} 정산예정</span></div>
-                          <div className="flex justify-between items-end">
-                             <div className={`text-[32px] font-black tracking-tighter leading-none mt-1`}>{formatLargeMoney(group.total)}<span className="text-base font-bold ml-1 opacity-80">원</span></div>
-                             <div className="flex flex-col items-end gap-1.5 text-[10px] font-bold opacity-90 pb-1"><span className="flex gap-2 text-teal-50"><span>총 {formatLargeMoney(metrics.totalCnt)}건</span><span>{metrics.durationStr} 근무</span></span><span className="flex gap-2 text-teal-200"><span>평단 {formatLargeMoney(metrics.perDelivery)}원</span><span>시급 {formatLargeMoney(metrics.hourlyRate)}원</span></span></div>
-                          </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 relative z-10">
-                         <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.main || 0)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.sub || 0)}원</span></div></div>
-                         <div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#a5f3fc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(baeminTot)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(coupangTot)}원</span></div></div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-        );
-      })()}
+      {isPendingSummaryOpen && (() => { const upcomingToDisplay = upcomingPaydays.slice(0, 2); return (<div className="grid grid-cols-2 gap-2 mb-2 animate-in slide-in-from-top-2">{upcomingToDisplay.length === 0 ? (<div className="col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-slate-200 text-center text-slate-500 text-sm font-black">입금 대기 중인 정산금이 없습니다.</div>) : (upcomingToDisplay.map((pd, idx) => { const group = pendingByPayday[pd]; const metrics = getGroupMetrics(group.items); const baeminTot = group.items.filter(d=>d.platform==='배민').reduce((a,b)=>a+(b.amount||0),0); const coupangTot = group.items.filter(d=>d.platform==='쿠팡').reduce((a,b)=>a+(b.amount||0),0); return (<div key={pd} onClick={() => setSelectedWeeklySummary(pd)} className={`rounded-[2rem] p-5 shadow-lg border bg-gradient-to-br from-teal-700 to-cyan-800 border-teal-600 flex flex-col justify-between cursor-pointer active:scale-95 transition-transform text-white relative overflow-hidden col-span-2`}><Bike className="absolute -right-2 -bottom-2 w-32 h-32 opacity-10 rotate-12" fill="white" /><div className="flex flex-col mb-4 relative z-10"><div className="text-[11px] font-black opacity-90 mb-1 flex items-center gap-1"><span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm border ${idx === 0 ? 'bg-white text-teal-700 border-white' : 'bg-teal-600 text-white border-teal-500'}`}>{idx === 0 ? '이번주' : '다음주'}</span><span className="text-teal-50">{pd.slice(5).replace('-','/')} 정산예정</span></div><div className="flex justify-between items-end"><div className={`text-[32px] font-black tracking-tighter leading-none mt-1`}>{formatLargeMoney(group.total)}<span className="text-base font-bold ml-1 opacity-80">원</span></div><div className="flex flex-col items-end gap-1.5 text-[10px] font-bold opacity-90 pb-1"><span className="flex gap-2 text-teal-50"><span>총 {formatLargeMoney(metrics.totalCnt)}건</span><span>{metrics.durationStr} 근무</span></span><span className="flex gap-2 text-teal-200"><span>평단 {formatLargeMoney(metrics.perDelivery)}원</span><span>시급 {formatLargeMoney(metrics.hourlyRate)}원</span></span></div></div></div><div className="grid grid-cols-2 gap-2 relative z-10"><div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">{MAIN_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.main || 0)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">{SUB_LABEL}</span><span className="text-[13px] font-black text-white">{formatLargeMoney(group.sub || 0)}원</span></div></div><div className="bg-white/10 rounded-xl p-2.5 flex flex-col gap-1 border border-white/20 shadow-sm"><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-[#a5f3fc]">배민</span><span className="text-[13px] font-black text-white">{formatLargeMoney(baeminTot)}원</span></div><div className="flex justify-between items-center"><span className="text-[11px] font-bold text-teal-100">쿠팡</span><span className="text-[13px] font-black text-white">{formatLargeMoney(coupangTot)}원</span></div></div></div></div>) }))}</div>); })()}
 
       <div ref={tabRef} className="flex items-center gap-2 mt-2">
         <div className="flex bg-white p-1 rounded-2xl flex-1 shadow-sm border border-slate-200">
@@ -900,32 +665,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       )}
 
       {/* 리스트 영역 */}
-      {deliverySubTab === 'calendar' && (() => {
-        const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
-        const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
-        const days = Array(firstDay).fill(null).concat(Array.from({length:daysInMonth}, (_,i)=>i+1));
-        const dataByDate = {};
-        (dailyDeliveries || []).forEach(d => { if(d.date && d.date.startsWith(currentMonthKey)) { if(!dataByDate[d.date]) dataByDate[d.date] = { amt: 0 }; dataByDate[d.date].amt += (d.amount||0); } });
-        return (
-          <div className="bg-white rounded-[2rem] p-4 shadow-sm border border-blue-200 animate-in slide-in-from-bottom-2 mt-3">
-             <div className="grid grid-cols-7 gap-1 text-center mb-2">{['일','월','화','수','목','금','토'].map((d,i) => <div key={d} className={`text-[11px] font-black ${i===0?'text-red-500':i===6?'text-blue-500':'text-slate-500'}`}>{d}</div>)}</div>
-             <div className="grid grid-cols-7 gap-1">
-               {days.map((d, i) => {
-                 if(!d) return <div key={`empty-${i}`} className="h-[65px] bg-slate-50 rounded-xl border border-slate-100"></div>;
-                 const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                 const dayData = dataByDate[dateStr] || { amt: 0 }; const isToday = dateStr === getKSTDateStr();
-                 const dayIndex = (i % 7); const isRed = dayIndex === 0; const isBlue = dayIndex === 6; const dayColor = isRed ? 'text-red-500' : isBlue ? 'text-blue-500' : 'text-slate-800';
-                 return (
-                   <div key={`day-${i}`} onClick={() => { if(dayData.amt > 0) setSelectedDailySummary(dateStr); }} className={`h-[65px] border rounded-xl p-1 flex flex-col items-center justify-center ${dayData.amt>0?'border-blue-300 bg-blue-50/80 shadow-sm cursor-pointer active:scale-95 transition-transform':'border-slate-200 bg-white'} ${isToday ? 'ring-2 ring-blue-500 ring-offset-1 z-10 shadow-md' : ''}`}>
-                     <span className={`text-[13px] font-black mb-1 ${dayColor}`}>{d}</span>
-                     {dayData.amt > 0 && <span className="text-[10px] font-black text-blue-600 w-full text-center truncate tracking-tighter">{formatCompactMoney(dayData.amt).replace('+','')}</span>}
-                   </div>
-                 )
-               })}
-             </div>
-          </div>
-        );
-      })()}
+      {deliverySubTab === 'calendar' && (() => { const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay(); const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate(); const days = Array(firstDay).fill(null).concat(Array.from({length:daysInMonth}, (_,i)=>i+1)); const dataByDate = {}; (dailyDeliveries || []).forEach(d => { if(d.date && d.date.startsWith(currentMonthKey)) { if(!dataByDate[d.date]) dataByDate[d.date] = { amt: 0 }; dataByDate[d.date].amt += (d.amount||0); } }); return ( <div className="bg-white rounded-[2rem] p-4 shadow-sm border border-blue-200 animate-in slide-in-from-bottom-2 mt-3"><div className="grid grid-cols-7 gap-1 text-center mb-2">{['일','월','화','수','목','금','토'].map((d,i) => <div key={d} className={`text-[11px] font-black ${i===0?'text-red-500':i===6?'text-blue-500':'text-slate-500'}`}>{d}</div>)}</div><div className="grid grid-cols-7 gap-1">{days.map((d, i) => { if(!d) return <div key={`empty-${i}`} className="h-[65px] bg-slate-50 rounded-xl border border-slate-100"></div>; const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`; const dayData = dataByDate[dateStr] || { amt: 0 }; const isToday = dateStr === getKSTDateStr(); const dayIndex = (i % 7); const isRed = dayIndex === 0; const isBlue = dayIndex === 6; const dayColor = isRed ? 'text-red-500' : isBlue ? 'text-blue-500' : 'text-slate-800'; return ( <div key={`day-${i}`} onClick={() => { if(dayData.amt > 0) setSelectedDailySummary(dateStr); }} className={`h-[65px] border rounded-xl p-1 flex flex-col items-center justify-center ${dayData.amt>0?'border-blue-300 bg-blue-50/80 shadow-sm cursor-pointer active:scale-95 transition-transform':'border-slate-200 bg-white'} ${isToday ? 'ring-2 ring-blue-500 ring-offset-1 z-10 shadow-md' : ''}`}><span className={`text-[13px] font-black mb-1 ${dayColor}`}>{d}</span>{dayData.amt > 0 && <span className="text-[10px] font-black text-blue-600 w-full text-center truncate tracking-tighter">{formatCompactMoney(dayData.amt).replace('+','')}</span>}</div> ) })}</div></div> ); })()}
 
       {deliverySubTab === 'weekly' && (
         <div className="space-y-3 animate-in slide-in-from-right duration-300 mt-3">
@@ -957,11 +697,9 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                  </div>
                  <div className="border-t border-slate-100 bg-slate-50 flex justify-between items-center pr-3">
                     <button onClick={(e) => toggleDailyDate(date, e)} className="flex-1 py-3 flex justify-center items-center gap-1 text-[12px] font-black text-slate-500 hover:text-blue-600 transition-colors">{expandedDailyDates[date] ? <>▲ 닫기</> : <>▼ 회차별 상세</>}</button>
-                    {/* 💡 [수정] 읽기 전용 상태일 때는 통합 버튼 숨기기 */}
                     {!isReadOnly && expandedDailyDates[date] && shiftList.length > 1 && (<button onClick={() => {setMergeModeDate(date); setSelectedShiftsToMerge([]);}} className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-black rounded-lg shadow-sm active:scale-95 flex items-center gap-1">🔗 통합</button>)}
                  </div>
-                 
-                 {/* 💡 [복구 완료] 통합(Merge) UI 블록 */}
+
                  {expandedDailyDates[date] && mergeModeDate === date && !isReadOnly && (
                      <div className="px-4 pb-4 space-y-2 bg-slate-50 animate-in slide-in-from-top-2 duration-300">
                          <div className="flex justify-between items-center mb-2">
@@ -1014,7 +752,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       )}
 
-      {/* 💡 [변경] 읽기 전용 상태가 아닐 때만 하단 플러스 버튼 노출 */}
       {!isReadOnly && (
         <button onClick={() => { 
           const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow;
@@ -1023,7 +760,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
       )}
 
-      {/* 💡 배달 마감 모달 */}
       {isDeliveryModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[120] flex items-end justify-center p-0">
           <div className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[90vh] border-t-8 border-blue-500 mt-20 animate-in slide-in-from-bottom duration-300">
@@ -1074,7 +810,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                         <div className="flex gap-2 items-center w-full">
                             <span className="w-[60px] shrink-0 text-[11px] font-black text-slate-500 bg-slate-100 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-200 shadow-inner">{SUB_LABEL}</span>
                             <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subBaeminAmt ? formatLargeMoney(deliveryFormData.subBaeminAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, subBaeminAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="서브 총액" className="flex-[7] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:bg-white focus:border-[#2ac1bc] focus:ring-2 focus:ring-[#2ac1bc]/20 transition-all text-slate-900 placeholder:text-slate-300" />
-                            <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subBaeminCnt} onChange={e => setDeliveryFormData({...deliveryFormData, subBaeminCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:bg-white focus:border-[#2ac1bc] focus:ring-2 focus:ring-[#2ac1bc]/20 transition-all text-slate-900 placeholder:text-slate-300" />
+                            <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subBaeminCnt} onChange={e => setDeliveryFormData({...deliveryFormData, subBaeminCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
                         </div>
                         <NetDiffInfo device="sub" platform="배민" inputAmt={deliveryFormData.subBaeminAmt} inputCnt={deliveryFormData.subBaeminCnt} date={deliveryFormData.date} />
                       </div>
@@ -1137,7 +873,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                  ))}
                </div>
                
-               {/* 💡 [변경] 읽기 전용 상태일 때는 닫기 버튼만 노출 */}
                {isReadOnly ? (
                  <button onClick={() => setSelectedShiftDetail(null)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button>
                ) : (
@@ -1154,7 +889,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          </div>
       )}
 
-      {/* 💡 배달 마감 3선택 커스텀 팝업 */}
       {showCloseChoice && (
         <div className="fixed inset-0 bg-black/80 z-[150] flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -1195,7 +929,7 @@ export default function App() {
   const [triggerInfoModal, setTriggerInfoModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // 💡 [신규] 가면 쓰기(대리 열람) 상태
+  // 💡 가면 쓰기(대리 열람) 상태
   const [impersonatingUser, setImpersonatingUser] = useState(null);
   
   const todayStr = getKSTDateStr();
@@ -1230,16 +964,20 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 💡 [신규] 수익 데이터 가져오기 (가면 쓰기 상태에 따라 대상 변경)
+  // 💡 [수도꼭지 교체 완벽 해결] 선택한 사용자의 수익 데이터만 정확히 가져옵니다.
   useEffect(() => {
+    let unsubDelivery = null;
     if (user) {
+      // 내가 누구를 클릭했냐에 따라 타겟 ID가 바뀜
       const targetUid = impersonatingUser ? impersonatingUser.uid : user.uid;
       const q = query(collection(db, 'delivery'), where('userId', '==', targetUid));
-      const unsub = onSnapshot(q, (s) => 
+      unsubDelivery = onSnapshot(q, (s) => 
         setDailyDeliveries(s.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse())
       );
-      return () => unsub();
     }
+    return () => {
+      if (unsubDelivery) unsubDelivery();
+    };
   }, [user, impersonatingUser]);
 
   const isAdmin = userData?.status === 'admin' || userData?.isAdmin === true;
@@ -1250,7 +988,6 @@ export default function App() {
     } 
   }, [isAdmin]);
 
-  // 🚀 [현아에셋 ➔ 배사모] 과거 데이터 마이그레이션 함수
   const handleSyncFromHyuna = async () => {
     if (!window.confirm("현아에셋 DB에서 과거 데이터(1월~)를 가져옵니다.\n이미 배사모에 있는 데이터와 겹치면 중복될 수 있습니다.\n\n가져오시겠습니까?")) return;
     setIsSyncing(true);
@@ -1316,7 +1053,7 @@ export default function App() {
   return (
     <div className="h-[100dvh] flex flex-col bg-slate-50 overflow-hidden font-sans select-none">
       
-      {/* 💡 [신규] 다른 유저 화면 보기 모드일 때 뜨는 초강력 경고바 */}
+      {/* 💡 다른 유저 화면 보기 모드일 때 뜨는 초강력 경고바 */}
       {impersonatingUser && (
         <div className="bg-rose-600 text-white p-3 text-center text-sm font-black flex justify-between items-center z-50 shrink-0 shadow-md">
            <div className="flex items-center gap-2 animate-pulse">
@@ -1354,13 +1091,13 @@ export default function App() {
           {activeTab === 'delivery' && (
              <DeliveryView 
                user={user} 
-               userData={impersonatingUser || userData}  /* 💡 가면 쓴 상태면 그 사람 정보 전달 */
+               userData={impersonatingUser || userData}  
                dailyDeliveries={dailyDeliveries} 
                selectedYear={selectedYear} 
                selectedMonth={selectedMonth} 
                globalNotice={globalNotice}
                onNoticeClick={() => { setActiveTab('board'); setTriggerInfoModal(true); }} 
-               isReadOnly={!!impersonatingUser} /* 💡 읽기 전용 모드 ON */
+               isReadOnly={!!impersonatingUser} 
              />
           )}
           {activeTab === 'board' && (
@@ -1370,7 +1107,6 @@ export default function App() {
                resetModalTrigger={() => setTriggerInfoModal(false)} 
              />
           )}
-          {/* 💡 정비 관리에 userData 전달 (닉네임 저장용) */}
           {activeTab === 'maintenance' && <MaintenanceView user={user} userData={userData} />}
           {activeTab === 'status' && <StatusView allUsers={allUsers} />}
           
@@ -1383,7 +1119,6 @@ export default function App() {
                 <button onClick={() => signOut(auth)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-black border border-slate-200 active:bg-slate-100 transition-colors">로그아웃</button>
               </div>
 
-              {/* 🚀 현아에셋 동기화 버튼 (오직 방장님 계정만 뜸) */}
               {user.uid === MASTER_USER_ID && (
                 <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-200 shadow-sm">
                   <h3 className="text-sm font-black text-indigo-700 mb-3 flex items-center gap-1.5"><Download size={16}/> 현아에셋 데이터 동기화</h3>
@@ -1395,14 +1130,13 @@ export default function App() {
                 </div>
               )}
 
-              {/* 🚀 [신규 기능] 다른 라이더 수익 열람 (오직 방장님 계정만 뜸) */}
               {user.uid === MASTER_USER_ID && (
                 <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-200 shadow-sm mt-6 animate-in slide-in-from-top-2">
                   <h3 className="text-sm font-black text-emerald-700 mb-3 flex items-center gap-1.5"><Search size={16}/> 멤버 수익 조회 (방장 전용)</h3>
                   <p className="text-xs font-bold text-emerald-600/70 mb-4">다른 멤버의 수익과 배달 내역을 <strong className="text-rose-500">읽기 전용</strong>으로 확인합니다.</p>
                   <div className="grid grid-cols-2 gap-2">
                     {allUsers.filter(u => u.uid !== user.uid).map(u => (
-                      <button key={u.uid} onClick={() => { setImpersonatingUser(u); setActiveTab('delivery'); }} className="p-3 bg-white rounded-xl border border-emerald-100 shadow-sm text-left active:scale-95 transition-transform flex flex-col gap-1">
+                      <button key={u.uid} onClick={() => { setImpersonatingUser(u); setActiveTab('delivery'); }} className="p-3 bg-white rounded-xl border border-emerald-100 shadow-sm text-left active:scale-95 transition-transform flex flex-col gap-1 hover:bg-emerald-100/50">
                         <span className="text-[13px] font-black text-slate-800">{u.nickname}</span>
                         <span className="text-[10px] font-bold text-slate-500">{u.name} / {u.bikeNumber?.slice(-4)}</span>
                       </button>
@@ -1448,7 +1182,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* 💡 [변경] 가면 쓴 상태에서는 헷갈리지 않게 하단 네비게이션 숨기기 */}
       {!impersonatingUser && (
         <div className="fixed bottom-6 left-0 right-0 pointer-events-none z-50">
           <nav className="mx-auto max-w-sm pointer-events-auto h-[72px] bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full border border-slate-200/60 flex justify-around items-center px-4">
