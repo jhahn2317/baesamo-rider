@@ -20,7 +20,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🚀 현아에셋 연결용 투잡(Secondary) DB 엔진!
+// 🚀 현아에셋 연결용 투잡(Secondary) DB 엔진
 const hyunaConfig = {
   apiKey: "AIzaSyDmsKLrfvPrJOGTdeW2HseRWiGMGqM6asw", authDomain: "hyuna-asset-pro.firebaseapp.com",
   projectId: "hyuna-asset-pro", storageBucket: "hyuna-asset-pro.firebasestorage.app",
@@ -29,7 +29,7 @@ const hyunaConfig = {
 const hyunaApp = initializeApp(hyunaConfig, 'hyunaApp');
 const hyunaDb = getFirestore(hyunaApp);
 
-// 🔐 방장님 마스터키! (이 계정만 동기화 기능 활성화)
+// 🔐 방장님 마스터키!
 const MASTER_USER_ID = "MPxgtZ6F9HPNF0l7xTO5lTHhWGH2";
 
 const getKSTDate = () => { const d = new Date(); return new Date(d.getTime() + (d.getTimezoneOffset() * 60000) + (9 * 3600000)); };
@@ -95,7 +95,6 @@ const getGroupMetrics = (items) => {
   return { durationStr: totalMins > 0 ? `${hours > 0 ? hours+'시간 ' : ''}${mins > 0 ? mins+'분' : ''}`.trim() : '-', totalCnt, totalAmt, perDelivery: totalCnt > 0 ? Math.round(totalAmt / totalCnt) : 0, hourlyRate: totalMins > 0 ? Math.round(totalAmt / (totalMins / 60)) : 0 };
 };
 
-// 💡 터치 드래그 닫기 함수
 export const handleTouchStart = (e) => { e.currentTarget.dataset.startY = e.touches[0].clientY; e.currentTarget.style.transition = 'none'; };
 export const handleTouchMove = (e) => { const swipeDistance = e.touches[0].clientY - parseFloat(e.currentTarget.dataset.startY || 0); if (swipeDistance > 0) e.currentTarget.style.transform = `translateY(${swipeDistance}px)`; };
 export const handleTouchEnd = (e, closeFunction) => {
@@ -147,7 +146,7 @@ function MaintenanceView({ user, userData }) {
       return true;
     });
   }, [list, selectedFilter]);
-
+ 
   return (
     <div className="p-5 space-y-3 animate-in fade-in duration-500 pb-28">
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex justify-between items-center">
@@ -333,24 +332,38 @@ function StatusView({ allUsers }) {
   const active = allUsers.filter(u => u.isRiding && !u.isStealth);
   const stealthUsers = allUsers.filter(u => u.isRiding && u.isStealth);
   const inactiveNormal = allUsers.filter(u => !u.isRiding && !u.isStealth);
-  const inactive = [...inactiveNormal, ...stealthUsers]; 
+  const inactive = [...inactiveNormal, ...stealthUsers]; // 💡 스텔스는 철저하게 휴식중으로 위장
 
   return (
     <div className="p-5 space-y-6 pb-28 animate-in fade-in duration-500">
       <div className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm">
-        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between"><span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중 현황</span><span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span></h2>
+        <h2 className="text-sm font-black text-blue-600 mb-4 flex items-center justify-between">
+           <span className="flex items-center gap-1.5"><Bike size={18}/> 운행 중 현황</span>
+           <span className="bg-blue-100 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px]">{active.length}명</span>
+        </h2>
         <div className="grid grid-cols-2 gap-2.5">
           {active.map(r => (
-            <div key={r.uid} className="p-3 rounded-[1rem] border border-green-200 bg-green-50 shadow-sm flex flex-col gap-1 transition-all"><div className="flex items-center gap-1.5"><span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span></span><span className="text-[11px] font-black text-green-700">🟢 운행중</span></div><div className="text-[13px] font-black text-slate-800 truncate mt-0.5">{r.nickname}</div><div className="text-[10px] font-bold text-slate-500 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div></div>
+            <div key={r.uid} className="p-3 rounded-[1rem] border border-green-200 bg-green-50 shadow-sm flex flex-col gap-1 transition-all">
+               <div className="flex items-center gap-1.5"><span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span></span><span className="text-[11px] font-black text-green-700">🟢 운행중</span></div>
+               <div className="text-[13px] font-black text-slate-800 truncate mt-0.5">{r.nickname}</div>
+               <div className="text-[10px] font-bold text-slate-500 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div>
+            </div>
           ))}
           {active.length === 0 && <div className="col-span-2 text-center py-4 text-xs font-bold text-slate-400">현재 운행 중인 멤버가 없습니다.</div>}
         </div>
       </div>
       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 opacity-80 shadow-sm">
-        <h2 className="text-xs font-black text-slate-400 mb-4 flex items-center justify-between"><span className="flex items-center gap-1.5"><Users size={16}/> 휴식 중</span><span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px]">기본 {inactiveNormal.length}명 + 🥷스텔스 {stealthUsers.length}명</span></h2>
+        <h2 className="text-xs font-black text-slate-400 mb-4 flex items-center justify-between">
+          <span className="flex items-center gap-1.5"><Users size={16}/> 휴식 중</span>
+          <span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px]">기본 {inactiveNormal.length}명 + 🥷스텔스 {stealthUsers.length}명</span>
+        </h2>
         <div className="grid grid-cols-2 gap-2.5">
           {inactive.map(r => (
-            <div key={r.uid} className="p-3 rounded-[1rem] border border-slate-200 bg-slate-50 flex flex-col gap-1"><div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-yellow-400"></span><span className="text-[11px] font-black text-slate-500">🟡 휴식중</span></div><div className="text-[13px] font-black text-slate-600 truncate mt-0.5">{r.nickname}</div><div className="text-[10px] font-bold text-slate-400 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div></div>
+            <div key={r.uid} className="p-3 rounded-[1rem] border border-slate-200 bg-slate-50 flex flex-col gap-1">
+               <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-yellow-400"></span><span className="text-[11px] font-black text-slate-500">🟡 휴식중</span></div>
+               <div className="text-[13px] font-black text-slate-600 truncate mt-0.5">{r.nickname}</div>
+               <div className="text-[10px] font-bold text-slate-400 truncate">{r.age ? `${r.age}세` : '-'} / {r.bikeNumber?.slice(-4) || '번호없음'}</div>
+            </div>
           ))}
         </div>
       </div>
@@ -379,7 +392,6 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
 }
 
 // === [6. 메인 뷰: 배달 수익 관리 (DeliveryView)] ===
-// 💡 isReadOnly props 추가 (가면 쓰기 상태 확인용)
 function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth, globalNotice, onNoticeClick, isReadOnly }) {
   const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
   const [deliverySubTab, setDeliverySubTab] = useState('daily');
@@ -388,12 +400,16 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [isDeliverySummaryOpen, setIsDeliverySummaryOpen] = useState(true);
   const [isPendingSummaryOpen, setIsPendingSummaryOpen] = useState(false);
   const [isYearlySummaryOpen, setIsYearlySummaryOpen] = useState(false);
+  
+  // 💡 [복구 확인] 병합 모드용 상태
   const [mergeModeDate, setMergeModeDate] = useState(null);
   const [selectedShiftsToMerge, setSelectedShiftsToMerge] = useState([]);
+  
   const [splitQueue, setSplitQueue] = useState([]);
   const [recoveryShift, setRecoveryShift] = useState(() => { const saved = localStorage.getItem('baesamoRecoveryShift'); return saved ? JSON.parse(saved) : null; });
   const [expandedDailyDates, setExpandedDailyDates] = useState({});
   const toggleDailyDate = (date, e) => { e.stopPropagation(); setExpandedDailyDates(prev => ({ ...prev, [date]: !prev[date] })); };
+  
   const [selectedShiftDetail, setSelectedShiftDetail] = useState(null);
   const [selectedWeeklySummary, setSelectedWeeklySummary] = useState(null);
   const [selectedDailySummary, setSelectedDailySummary] = useState(null);
@@ -403,7 +419,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   
   const tabRef = useRef(null);
 
-  // 💡 읽기 전용 상태가 아닐 때만 '정훈/현아' 라벨 적용
+  // 💡 가면 쓰기 중이 아니면서, 내가 정훈님일 때만 라벨 변환 적용!
   const isViewingSelf = !isReadOnly;
   const MAIN_LABEL = (user.uid === MASTER_USER_ID && isViewingSelf) ? '정훈' : (userData?.nickname || '메인');
   const SUB_LABEL = (user.uid === MASTER_USER_ID && isViewingSelf) ? '현아' : '투폰(서브)';
@@ -497,7 +513,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const yearlyMainAmt = yearlyItems.filter(d => d.device === 'main').reduce((a,b)=>a+(b.amount||0), 0);
   const yearlySubAmt = yearlyItems.filter(d => d.device === 'sub').reduce((a,b)=>a+(b.amount||0), 0);
 
-  // 🚀 전체 타임 수정 함수
+  // 🚀 [복구 확인] 전체 타임 수정 함수
   const openEditShiftForm = (shift) => {
     let hasSubData = shift.items.some(i => i.device === 'sub');
     const form = { ...emptyForm, date: shift.date, startTime: shift.startTime || '', endTime: shift.endTime || '', useTwoPhones: user.uid === MASTER_USER_ID || hasSubData };
@@ -575,6 +591,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
     setSelectedShiftDetail(null);
   };
 
+  // 🚀 [복구 확인] 통합 실행 함수 및 체크 박스 로직
   const handleToggleMergeShift = (shiftId) => { setSelectedShiftsToMerge(prev => prev.includes(shiftId) ? prev.filter(id => id !== shiftId) : [...prev, shiftId]); };
 
   const executeShiftMerge = async (date) => {
@@ -697,9 +714,11 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                  </div>
                  <div className="border-t border-slate-100 bg-slate-50 flex justify-between items-center pr-3">
                     <button onClick={(e) => toggleDailyDate(date, e)} className="flex-1 py-3 flex justify-center items-center gap-1 text-[12px] font-black text-slate-500 hover:text-blue-600 transition-colors">{expandedDailyDates[date] ? <>▲ 닫기</> : <>▼ 회차별 상세</>}</button>
+                    {/* 🚀 [복구] 읽기 전용이 아닐 때만 통합 버튼 노출 */}
                     {!isReadOnly && expandedDailyDates[date] && shiftList.length > 1 && (<button onClick={() => {setMergeModeDate(date); setSelectedShiftsToMerge([]);}} className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-black rounded-lg shadow-sm active:scale-95 flex items-center gap-1">🔗 통합</button>)}
                  </div>
 
+                 {/* 🚀 [복구] 통합(Merge) UI 렌더링 블록 */}
                  {expandedDailyDates[date] && mergeModeDate === date && !isReadOnly && (
                      <div className="px-4 pb-4 space-y-2 bg-slate-50 animate-in slide-in-from-top-2 duration-300">
                          <div className="flex justify-between items-center mb-2">
@@ -752,6 +771,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       )}
 
+      {/* 💡 읽기 전용 모드가 아닐 때만 하단 플러스 버튼 보이기 */}
       {!isReadOnly && (
         <button onClick={() => { 
           const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow;
@@ -760,6 +780,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
       )}
 
+      {/* 💡 배달 마감 모달 */}
       {isDeliveryModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[120] flex items-end justify-center p-0">
           <div className="bg-[#f8fafc] w-full max-w-md rounded-t-[2.5rem] p-5 pb-8 shadow-2xl flex flex-col max-h-[90vh] border-t-8 border-blue-500 mt-20 animate-in slide-in-from-bottom duration-300">
@@ -810,7 +831,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                         <div className="flex gap-2 items-center w-full">
                             <span className="w-[60px] shrink-0 text-[11px] font-black text-slate-500 bg-slate-100 rounded-xl text-center flex items-center justify-center h-[46px] border border-slate-200 shadow-inner">{SUB_LABEL}</span>
                             <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subBaeminAmt ? formatLargeMoney(deliveryFormData.subBaeminAmt) : ''} onChange={e => setDeliveryFormData({...deliveryFormData, subBaeminAmt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="서브 총액" className="flex-[7] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-3 h-[46px] outline-none border border-slate-200 focus:bg-white focus:border-[#2ac1bc] focus:ring-2 focus:ring-[#2ac1bc]/20 transition-all text-slate-900 placeholder:text-slate-300" />
-                            <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subBaeminCnt} onChange={e => setDeliveryFormData({...deliveryFormData, subBaeminCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 transition-all text-slate-900 placeholder:text-slate-300" />
+                            <input type="text" inputMode="numeric" pattern="[0-9,]*" value={deliveryFormData.subBaeminCnt} onChange={e => setDeliveryFormData({...deliveryFormData, subBaeminCnt: e.target.value.replace(/[^0-9]/g, '')})} placeholder="건수" className="flex-[3] min-w-0 text-[15px] font-black bg-slate-50 rounded-xl px-1 h-[46px] text-center outline-none border border-slate-200 focus:bg-white focus:border-[#2ac1bc] focus:ring-2 focus:ring-[#2ac1bc]/20 transition-all text-slate-900 placeholder:text-slate-300" />
                         </div>
                         <NetDiffInfo device="sub" platform="배민" inputAmt={deliveryFormData.subBaeminAmt} inputCnt={deliveryFormData.subBaeminCnt} date={deliveryFormData.date} />
                       </div>
@@ -873,6 +894,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                  ))}
                </div>
                
+               {/* 💡 [복구 확인] 읽기 전용일 때는 닫기 버튼만 노출, 아닐 때는 수정/삭제 버튼 노출 */}
                {isReadOnly ? (
                  <button onClick={() => setSelectedShiftDetail(null)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button>
                ) : (
@@ -889,6 +911,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          </div>
       )}
 
+      {/* 💡 배달 마감 3선택 커스텀 팝업 */}
       {showCloseChoice && (
         <div className="fixed inset-0 bg-black/80 z-[150] flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -943,33 +966,44 @@ export default function App() {
     document.getElementsByTagName('head')[0].appendChild(meta);
   }, []);
 
+  // 💡 커서 AI 오류 해결: 리스너 클린업(Cleanup) 완벽 적용
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (currentUser) => {
+    let unsubUser = null;
+    let unsubAllUsers = null;
+    let unsubNotice = null;
+
+    const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        onSnapshot(doc(db, 'users', currentUser.uid), (docSnap) => { 
+        unsubUser = onSnapshot(doc(db, 'users', currentUser.uid), (docSnap) => { 
           if (docSnap.exists()) setUserData(docSnap.data()); 
           setLoading(false); 
         });
-        onSnapshot(query(collection(db, 'users'), where('status', 'in', ['approved', 'admin'])), (s) => 
-          setAllUsers(s.docs.map(doc => ({ uid: doc.id, ...doc.data() })))
+        unsubAllUsers = onSnapshot(query(collection(db, 'users'), where('status', 'in', ['approved', 'admin'])), (s) => 
+          setAllUsers(s.docs.map(doc => ({ ...doc.data(), uid: doc.id })))
         );
-        onSnapshot(doc(db, 'settings', 'globalNotice'), (s) => 
+        unsubNotice = onSnapshot(doc(db, 'settings', 'globalNotice'), (s) => 
           setGlobalNotice(s.exists() ? s.data() : null)
         );
       } else { 
         setUser(null); setUserData(null); setAllUsers([]); setPendingUsers([]); setGlobalNotice(null); setLoading(false); 
       }
     });
-    return () => unsub();
+
+    return () => {
+      unsubAuth();
+      if (unsubUser) unsubUser();
+      if (unsubAllUsers) unsubAllUsers();
+      if (unsubNotice) unsubNotice();
+    };
   }, []);
 
-  // 💡 [수도꼭지 교체 완벽 해결] 선택한 사용자의 수익 데이터만 정확히 가져옵니다.
+  // 💡 [수도꼭지 분리] 선택한 사용자의 수익 데이터만 정확히 가져옵니다.
   useEffect(() => {
     let unsubDelivery = null;
     if (user) {
-      // 내가 누구를 클릭했냐에 따라 타겟 ID가 바뀜
-      const targetUid = impersonatingUser ? impersonatingUser.uid : user.uid;
+      const impersonationUid = typeof impersonatingUser?.uid === 'string' && impersonatingUser.uid.trim() !== '' ? impersonatingUser.uid : '';
+      const targetUid = impersonationUid || user.uid;
       const q = query(collection(db, 'delivery'), where('userId', '==', targetUid));
       unsubDelivery = onSnapshot(q, (s) => 
         setDailyDeliveries(s.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse())
@@ -981,13 +1015,17 @@ export default function App() {
   }, [user, impersonatingUser]);
 
   const isAdmin = userData?.status === 'admin' || userData?.isAdmin === true;
+  
+  // 💡 커서 AI 경고 해결: return 값 명시
   useEffect(() => { 
     if (isAdmin) { 
       const q = query(collection(db, 'users'), where('status', '==', 'pending')); 
-      return onSnapshot(q, (s) => setPendingUsers(s.docs.map(doc => ({ uid: doc.id, ...doc.data() })))); 
+      const unsubPending = onSnapshot(q, (s) => setPendingUsers(s.docs.map(doc => ({ ...doc.data(), uid: doc.id })))); 
+      return () => unsubPending();
     } 
   }, [isAdmin]);
 
+  // 🚀 [현아에셋 ➔ 배사모] 과거 데이터 마이그레이션 함수
   const handleSyncFromHyuna = async () => {
     if (!window.confirm("현아에셋 DB에서 과거 데이터(1월~)를 가져옵니다.\n이미 배사모에 있는 데이터와 겹치면 중복될 수 있습니다.\n\n가져오시겠습니까?")) return;
     setIsSyncing(true);
@@ -1091,7 +1129,7 @@ export default function App() {
           {activeTab === 'delivery' && (
              <DeliveryView 
                user={user} 
-               userData={impersonatingUser || userData}  
+               userData={impersonatingUser || userData} 
                dailyDeliveries={dailyDeliveries} 
                selectedYear={selectedYear} 
                selectedMonth={selectedMonth} 
@@ -1119,6 +1157,7 @@ export default function App() {
                 <button onClick={() => signOut(auth)} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-black border border-slate-200 active:bg-slate-100 transition-colors">로그아웃</button>
               </div>
 
+              {/* 🚀 현아에셋 동기화 버튼 (오직 방장님 계정만 뜸) */}
               {user.uid === MASTER_USER_ID && (
                 <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-200 shadow-sm">
                   <h3 className="text-sm font-black text-indigo-700 mb-3 flex items-center gap-1.5"><Download size={16}/> 현아에셋 데이터 동기화</h3>
@@ -1130,6 +1169,7 @@ export default function App() {
                 </div>
               )}
 
+              {/* 🚀 [신규] 다른 라이더 수익 열람 (오직 방장님 계정만 뜸) */}
               {user.uid === MASTER_USER_ID && (
                 <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-200 shadow-sm mt-6 animate-in slide-in-from-top-2">
                   <h3 className="text-sm font-black text-emerald-700 mb-3 flex items-center gap-1.5"><Search size={16}/> 멤버 수익 조회 (방장 전용)</h3>
@@ -1182,6 +1222,7 @@ export default function App() {
         </main>
       </div>
 
+      {/* 💡 가면 쓴 상태에서는 헷갈리지 않게 하단 네비게이션 숨기기 */}
       {!impersonatingUser && (
         <div className="fixed bottom-6 left-0 right-0 pointer-events-none z-50">
           <nav className="mx-auto max-w-sm pointer-events-auto h-[72px] bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full border border-slate-200/60 flex justify-around items-center px-4">
