@@ -29,7 +29,7 @@ const hyunaConfig = {
 const hyunaApp = initializeApp(hyunaConfig, 'hyunaApp');
 const hyunaDb = getFirestore(hyunaApp);
 
-// 🔐 방장님 마스터키! (이 계정만 동기화 기능 활성화)
+// 🔐 방장님 마스터키! (이 계정만 동기화 기능 및 관리자 조회 기능 활성화)
 const MASTER_USER_ID = "MPxgtZ6F9HPNF0l7xTO5lTHhWGH2";
 
 const getKSTDate = () => { const d = new Date(); return new Date(d.getTime() + (d.getTimezoneOffset() * 60000) + (9 * 3600000)); };
@@ -105,7 +105,6 @@ export const handleTouchEnd = (e, closeFunction) => {
   else { e.currentTarget.style.transform = 'translateY(0)'; setTimeout(() => { e.currentTarget.style.transform = ''; }, 300); }
 };
 
-
 // === [2. 서브 뷰: 정비 관리 (MaintenanceView)] ===
 
 function MaintenanceView({ user, userData }) {
@@ -170,7 +169,6 @@ function MaintenanceView({ user, userData }) {
               <div className="flex flex-col"><p className="text-[9px] font-bold text-slate-400 mb-0.5">{m.date}</p><p className="font-black text-slate-800 text-[13px] leading-none">{m.item}</p>{m.mileage > 0 && <p className="text-[9px] text-blue-500 font-bold italic mt-1">{formatLargeMoney(m.mileage)}km 교체</p>}</div>
               <div className="flex flex-col items-end">
                 <p className="font-black text-blue-600 text-[14px] leading-none">{formatLargeMoney(m.cost)}원</p>
-                {/* 💡 삭제 팝업 적용 */}
                 <button onClick={() => { if(window.confirm('이 정비 기록을 정말 삭제하시겠습니까?')) deleteDoc(doc(db, 'maintenance', m.id)); }} className="text-slate-300 mt-1.5 active:scale-90 p-1 -mr-1"><Trash2 size={12}/></button>
               </div>
             </div>
@@ -441,8 +439,8 @@ function RegisterScreen({ onRegister, onBackToLogin }) {
 }
 
 // === [6. 메인 뷰: 배달 수익 관리 (DeliveryView)] ===
-
-function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth, globalNotice, onNoticeClick }) {
+// 💡 [추가] isReadOnly props 추가 (가면 쓰기 상태 확인용)
+function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedMonth, globalNotice, onNoticeClick, isReadOnly }) {
   const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
   const [deliverySubTab, setDeliverySubTab] = useState('daily');
   const [deliveryDateRange, setDeliveryDateRange] = useState({ start: '', end: '' });
@@ -462,13 +460,14 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingDeliveryShift, setEditingDeliveryShift] = useState(null);
   
-  // 💡 마감 확인용 3선택 팝업 상태 추가
   const [showCloseChoice, setShowCloseChoice] = useState(false);
   
   const tabRef = useRef(null);
 
-  const MAIN_LABEL = user.uid === MASTER_USER_ID ? '정훈' : (userData?.nickname || '메인');
-  const SUB_LABEL = user.uid === MASTER_USER_ID ? '현아' : '투폰(서브)';
+  // 💡 [변경] 읽기 전용 상태가 아닐 때만 '정훈/현아' 라벨 적용
+  const isViewingSelf = !isReadOnly;
+  const MAIN_LABEL = (user.uid === MASTER_USER_ID && isViewingSelf) ? '정훈' : (userData?.nickname || '메인');
+  const SUB_LABEL = (user.uid === MASTER_USER_ID && isViewingSelf) ? '현아' : '투폰(서브)';
 
   const emptyForm = { date: getWorkDateStr(), startTime: '', endTime: '', useTwoPhones: user.uid === MASTER_USER_ID, mainBaeminAmt: '', mainBaeminCnt: '', mainCoupangAmt: '', mainCoupangCnt: '', subBaeminAmt: '', subBaeminCnt: '', subCoupangAmt: '', subCoupangCnt: '' };
   const [deliveryFormData, setDeliveryFormData] = useState(emptyForm);
@@ -559,12 +558,33 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
   const yearlyMainAmt = yearlyItems.filter(d => d.device === 'main').reduce((a,b)=>a+(b.amount||0), 0);
   const yearlySubAmt = yearlyItems.filter(d => d.device === 'sub').reduce((a,b)=>a+(b.amount||0), 0);
 
-  // 🚀 [투잡 엔진] 동시 저장 마감 로직
+  // 🚀 [복구 완료] 타임 전체 수정 함수
+  const openEditShiftForm = (shift) => {
+    let hasSubData = shift.items.some(i => i.device === 'sub');
+    const form = { ...emptyForm, date: shift.date, startTime: shift.startTime || '', endTime: shift.endTime || '', useTwoPhones: user.uid === MASTER_USER_ID || hasSubData };
+    const platforms = ['배민', '쿠팡']; const devices = ['main', 'sub'];
+    devices.forEach(device => {
+        platforms.forEach(platform => {
+            const deviceEng = device === 'main' ? 'main' : 'sub'; const platformEng = platform === '배민' ? 'Baemin' : 'Coupang';
+            let priorAmt = 0; let priorCnt = 0;
+            (dailyDeliveries || []).forEach(d => { 
+                if (shift.items.some(item => item.id === d.id)) return; 
+                if (d.date === shift.date && d.device === device && d.platform === platform) { priorAmt += (d.amount || 0); priorCnt += (d.count || 0); } 
+            });
+            const thisItem = shift.items.find(i => i.device === device && i.platform === platform);
+            const thisAmt = thisItem ? (thisItem.amount || 0) : 0; const thisCnt = thisItem ? (thisItem.count || 0) : 0;
+            const cumulativeAmt = priorAmt + thisAmt; const cumulativeCnt = priorCnt + thisCnt;
+            if (cumulativeAmt > 0 || cumulativeCnt > 0) { form[`${deviceEng}${platformEng}Amt`] = String(cumulativeAmt); form[`${deviceEng}${platformEng}Cnt`] = String(cumulativeCnt); }
+        });
+    });
+    setDeliveryFormData(form); setEditingDeliveryShift(shift); setSelectedShiftDetail(null); setIsDeliveryModalOpen(true); 
+  };
+
   const handleDeliverySubmit = async (e) => {
     e.preventDefault(); if (!user) return;
     const timestamp = new Date().toISOString(); 
     const adds = [];
-    const hyunaAdds = []; // 💡 현아에셋 DB용 동시 저장 데이터 배열
+    const hyunaAdds = [];
 
     if (!editingDeliveryShift && timerActive) { handleEndDelivery(); }
 
@@ -576,7 +596,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       const finalAmt = Math.max(0, inputAmt - saved.amt); const finalCnt = Math.max(0, inputCnt - saved.cnt);
       if(finalAmt > 0 || finalCnt > 0) { 
          adds.push({ userId: user.uid, date: deliveryFormData.date, device, platform, amount: finalAmt, count: finalCnt, startTime: deliveryFormData.startTime, endTime: deliveryFormData.endTime, updatedAt: timestamp, nickname: userData.nickname }); 
-         // 🔐 방장님(정훈) 계정일 때만 현아에셋 데이터 동시 생성
          if (user.uid === MASTER_USER_ID) {
             const mappedName = device === 'main' ? '정훈' : '현아';
             hyunaAdds.push({
@@ -600,7 +619,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          for(const newDel of adds) { await addDoc(collection(db, 'delivery'), newDel); } 
       } else { 
          for(const newDel of adds) await addDoc(collection(db, 'delivery'), newDel); 
-         // 🚀 현아에셋 DB 동시 저장 실행
          if (hyunaAdds.length > 0 && user.uid === MASTER_USER_ID) {
             for(const hDel of hyunaAdds) { await addDoc(collection(hyunaDb, 'artifacts/hyuna-asset-pro/public/data/delivery'), hDel); }
          }
@@ -644,7 +662,6 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          if(window.confirm("수정 중인 내용을 취소하시겠습니까?")) setIsDeliveryModalOpen(false); 
      } 
      else if (timerActive) { 
-         // 💡 타이머 작동 중(운행 중)일 때는 3선택 팝업 띄우기
          setShowCloseChoice(true);
      } 
      else { 
@@ -659,10 +676,8 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
      }
   };
 
-  // 💡 3선택 팝업 처리 로직 완벽 수정!
   const handleFinalExit = async (type) => {
     if (type === 'CONTINUE') {
-      // 💡 [수정] 팝업 닫고, 배달 입력창도 닫아서 타이머 메인 화면으로 바로 복귀!
       setShowCloseChoice(false);
       setIsDeliveryModalOpen(false); 
     } else if (type === 'LATER') {
@@ -699,7 +714,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
       `}</style>
       
       <div className="mt-2">
-        <div onClick={onNoticeClick} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 overflow-hidden ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}>
+        <div onClick={!isReadOnly ? onNoticeClick : undefined} className={`rounded-2xl p-3 flex items-center gap-3 border shadow-sm active:scale-95 transition-all cursor-pointer hover:brightness-95 overflow-hidden ${displayNotice ? 'bg-rose-50 border-rose-200' : 'bg-white border-dashed border-slate-200'}`}>
           <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${displayNotice ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}><AlertCircle size={18}/></div>
           <div className={`flex-1 min-w-0 font-black text-[13px] overflow-hidden ${displayNotice ? 'text-rose-600' : 'text-slate-400'}`}>
             {displayNotice ? ( 
@@ -712,7 +727,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       </div>
 
-      {recoveryShift && !timerActive && (
+      {recoveryShift && !timerActive && !isReadOnly && (
          <div className="bg-red-50 border border-red-200 rounded-2xl p-3 shadow-sm flex flex-col gap-2 animate-in slide-in-from-top-2 mt-2">
             <div className="flex items-center gap-2"><AlertCircle size={16} className="text-red-600" /><span className="text-xs font-black text-red-700">저장 안 된 마감 기록이 있습니다!</span></div>
             <div className="flex gap-2 justify-end">
@@ -722,41 +737,44 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
          </div>
       )}
 
-      <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-1 ${timerActive ? (userData?.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2.5 ml-1 shrink-0">
-            <div className={`p-3 rounded-2xl shrink-0 ${timerActive ? 'bg-white/20 text-white animate-pulse shadow-inner' : 'bg-slate-700 text-slate-300 shadow-inner'}`}>
-               {userData?.isStealth ? <Ghost size={24} /> : <Timer size={24} />}
-            </div>
-            <div className="flex flex-col justify-center">
-              <div className={`text-[10px] font-black flex items-center mb-0.5 whitespace-nowrap ${timerActive ? 'text-blue-100' : 'text-slate-200'}`}>
-                {userData?.isStealth ? 'Stealth Mode' : 'Live Tracking'}
-                {timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 mr-1.5 ${userData?.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}
-                {userData?.trackingStartTime && timerActive && ( <span className="text-[9px] text-blue-100 font-bold bg-white/10 px-1.5 py-0.5 rounded shadow-sm border border-blue-300/30 tracking-tight">{formatTimeStr(new Date(userData.trackingStartTime))} 시작</span> )}
+      {/* 💡 [변경] 읽기 전용 상태일 때는 타이머 뷰 숨기기 */}
+      {!isReadOnly && (
+        <div className={`rounded-[2rem] p-5 shadow-lg transition-all duration-700 mt-1 ${timerActive ? (userData?.isStealth ? 'bg-gradient-to-br from-gray-700 to-gray-900 ring-4 ring-gray-400' : 'bg-gradient-to-br from-blue-600 to-indigo-800 ring-4 ring-blue-100 shadow-[0_10px_20px_rgba(37,99,235,0.3)]') : 'bg-gradient-to-br from-slate-500 to-slate-600 shadow-md'}`}>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2.5 ml-1 shrink-0">
+              <div className={`p-3 rounded-2xl shrink-0 ${timerActive ? 'bg-white/20 text-white animate-pulse shadow-inner' : 'bg-slate-700 text-slate-300 shadow-inner'}`}>
+                 {userData?.isStealth ? <Ghost size={24} /> : <Timer size={24} />}
               </div>
-              <div className={`text-[30px] font-black tracking-tighter leading-none whitespace-nowrap text-white drop-shadow-md`}>
-                 {timerActive && userData?.trackingStartTime ? `${Math.floor(elapsedSeconds/3600).toString().padStart(2,'0')}:${String(Math.floor((elapsedSeconds%3600)/60)).padStart(2,'0')}:${String(elapsedSeconds%60).padStart(2,'0')}` : '00:00:00'}
+              <div className="flex flex-col justify-center">
+                <div className={`text-[10px] font-black flex items-center mb-0.5 whitespace-nowrap ${timerActive ? 'text-blue-100' : 'text-slate-200'}`}>
+                  {userData?.isStealth ? 'Stealth Mode' : 'Live Tracking'}
+                  {timerActive && <span className={`inline-block w-1.5 h-1.5 rounded-full animate-pulse shadow-sm ml-1.5 mr-1.5 ${userData?.isStealth ? 'bg-gray-400' : 'bg-red-400'}`}></span>}
+                  {userData?.trackingStartTime && timerActive && ( <span className="text-[9px] text-blue-100 font-bold bg-white/10 px-1.5 py-0.5 rounded shadow-sm border border-blue-300/30 tracking-tight">{formatTimeStr(new Date(userData.trackingStartTime))} 시작</span> )}
+                </div>
+                <div className={`text-[30px] font-black tracking-tighter leading-none whitespace-nowrap text-white drop-shadow-md`}>
+                   {timerActive && userData?.trackingStartTime ? `${Math.floor(elapsedSeconds/3600).toString().padStart(2,'0')}:${String(Math.floor((elapsedSeconds%3600)/60)).padStart(2,'0')}:${String(elapsedSeconds%60).padStart(2,'0')}` : '00:00:00'}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-col gap-2 items-end shrink-0">
-             <button onClick={() => { 
-               if(timerActive) {
-                 const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow;
-                 if (userData?.trackingStartTime) { const startObj = new Date(userData.trackingStartTime); if (!isNaN(startObj.getTime())) startStr = formatTimeStr(startObj); }
-                 setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true);
-               } else { handleStartDelivery(); }
-             }} className={`px-4 py-2.5 rounded-[1rem] font-black text-[13px] shadow-md transition-all active:scale-95 whitespace-nowrap shrink-0 ${timerActive ? 'bg-white text-blue-700 hover:bg-blue-50' : 'bg-white/20 text-white border border-white/20 hover:bg-white/30'}`}>
-               {timerActive ? '마감하기' : '배달 시작'}
-             </button>
-             {timerActive && (
-               <button onClick={toggleStealth} className={`whitespace-nowrap shrink-0 text-[9px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData?.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
-                  <Ghost size={12}/> {userData?.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
+            <div className="flex flex-col gap-2 items-end shrink-0">
+               <button onClick={() => { 
+                 if(timerActive) {
+                   const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow;
+                   if (userData?.trackingStartTime) { const startObj = new Date(userData.trackingStartTime); if (!isNaN(startObj.getTime())) startStr = formatTimeStr(startObj); }
+                   setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true);
+                 } else { handleStartDelivery(); }
+               }} className={`px-4 py-2.5 rounded-[1rem] font-black text-[13px] shadow-md transition-all active:scale-95 whitespace-nowrap shrink-0 ${timerActive ? 'bg-white text-blue-700 hover:bg-blue-50' : 'bg-white/20 text-white border border-white/20 hover:bg-white/30'}`}>
+                 {timerActive ? '마감하기' : '배달 시작'}
                </button>
-             )}
+               {timerActive && (
+                 <button onClick={toggleStealth} className={`whitespace-nowrap shrink-0 text-[9px] px-3 py-1.5 rounded-lg font-black flex items-center gap-1 transition-all shadow-sm ${userData?.isStealth ? 'bg-gray-800 text-gray-200 border border-gray-600' : 'bg-blue-800/50 text-blue-100 border border-blue-400/30'}`}>
+                    <Ghost size={12}/> {userData?.isStealth ? '스텔스 끄기' : '스텔스 켜기'}
+                 </button>
+               )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="mb-1 mt-1">
         {isYearlySummaryOpen ? (
@@ -939,9 +957,36 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                  </div>
                  <div className="border-t border-slate-100 bg-slate-50 flex justify-between items-center pr-3">
                     <button onClick={(e) => toggleDailyDate(date, e)} className="flex-1 py-3 flex justify-center items-center gap-1 text-[12px] font-black text-slate-500 hover:text-blue-600 transition-colors">{expandedDailyDates[date] ? <>▲ 닫기</> : <>▼ 회차별 상세</>}</button>
-                    {expandedDailyDates[date] && shiftList.length > 1 && (<button onClick={() => {setMergeModeDate(date); setSelectedShiftsToMerge([]);}} className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-black rounded-lg shadow-sm active:scale-95 flex items-center gap-1">🔗 통합</button>)}
+                    {/* 💡 [수정] 읽기 전용 상태일 때는 통합 버튼 숨기기 */}
+                    {!isReadOnly && expandedDailyDates[date] && shiftList.length > 1 && (<button onClick={() => {setMergeModeDate(date); setSelectedShiftsToMerge([]);}} className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-black rounded-lg shadow-sm active:scale-95 flex items-center gap-1">🔗 통합</button>)}
                  </div>
-                 {expandedDailyDates[date] && (
+                 
+                 {/* 💡 [복구 완료] 통합(Merge) UI 블록 */}
+                 {expandedDailyDates[date] && mergeModeDate === date && !isReadOnly && (
+                     <div className="px-4 pb-4 space-y-2 bg-slate-50 animate-in slide-in-from-top-2 duration-300">
+                         <div className="flex justify-between items-center mb-2">
+                             <span className="text-xs font-black text-slate-600">통합할 회차를 선택하세요</span>
+                             <button onClick={() => setMergeModeDate(null)} className="text-xs font-bold text-slate-400 bg-white px-2 py-1 rounded border shadow-sm">취소</button>
+                         </div>
+                         {shiftList.map((shift) => {
+                             const isSelected = selectedShiftsToMerge.includes(shift.id);
+                             return (
+                                 <div key={shift.id} onClick={() => handleToggleMergeShift(shift.id)} className={`flex justify-between items-center p-3 rounded-2xl border transition-all cursor-pointer ${isSelected ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-white border-slate-200'}`}>
+                                     <div className="flex items-center gap-3">
+                                         <div className={`w-5 h-5 rounded-full flex items-center justify-center border ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-slate-50'}`}>{isSelected && <CheckCircle2 size={12}/>}</div>
+                                         <div>
+                                             <div className="font-bold text-[13px] text-slate-800">{shift.startTime}~{shift.endTime}</div>
+                                             <div className="text-[11px] font-black text-slate-500">{formatLargeMoney(shift.totalAmt)}원 ({shift.totalCnt}건)</div>
+                                         </div>
+                                     </div>
+                                 </div>
+                             )
+                         })}
+                         <button onClick={() => executeShiftMerge(date)} disabled={selectedShiftsToMerge.length < 2} className="w-full mt-2 bg-slate-800 text-white py-3 rounded-xl font-black text-sm active:scale-95 shadow-md disabled:opacity-50 transition-all">선택한 회차 하나로 통합하기</button>
+                     </div>
+                 )}
+
+                 {expandedDailyDates[date] && mergeModeDate !== date && (
                      <div className="px-4 pb-4 space-y-2 bg-slate-50 animate-in slide-in-from-top-2 duration-300">
                         {shiftList.map((shift, index) => {
                         const shiftOrder = shiftList.length - index; let shiftDurationStr = ''; let shiftHourlyRate = 0;
@@ -952,7 +997,7 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                         }
                         const platforms = Array.from(new Set(shift.items.map(item => item.platform)));
                         return (
-                          <div key={shift.id} onClick={() => setSelectedShiftDetail(shift)} className="flex justify-between items-center p-3 rounded-2xl border bg-gradient-to-br from-slate-500 to-indigo-600 text-white shadow-sm active:scale-95 transition-all">
+                          <div key={shift.id} onClick={() => setSelectedShiftDetail(shift)} className="flex justify-between items-center p-3 rounded-2xl border bg-gradient-to-br from-slate-500 to-indigo-600 text-white shadow-sm active:scale-95 transition-all cursor-pointer">
                               <div className="flex items-center gap-2">
                                   <div className="flex flex-col items-center justify-center shrink-0 w-[36px]"><span className="text-[11px] font-black px-1.5 py-0.5 rounded border border-white/20 bg-white/20">{shiftOrder}차</span>{shiftDurationStr && <span className="text-[9px] font-bold text-indigo-100">({shiftDurationStr})</span>}</div>
                                   <div className="pl-1"><div className="font-bold text-[13px]">{shift.startTime}~{shift.endTime}</div><div className="flex gap-1 mt-0.5">{platforms.map(p => (<span key={p} className="text-[9px] font-black px-1 py-0.5 rounded bg-white/20">{p}</span>))}</div></div>
@@ -969,11 +1014,14 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
         </div>
       )}
 
-      <button onClick={() => { 
-        const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow;
-        if (userData?.trackingStartTime) { const startObj = new Date(userData.trackingStartTime); if (!isNaN(startObj.getTime())) startStr = formatTimeStr(startObj); }
-        setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true); 
-      }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
+      {/* 💡 [변경] 읽기 전용 상태가 아닐 때만 하단 플러스 버튼 노출 */}
+      {!isReadOnly && (
+        <button onClick={() => { 
+          const now = getKSTDate(); const timeNow = formatTimeStr(now); let startStr = timeNow;
+          if (userData?.trackingStartTime) { const startObj = new Date(userData.trackingStartTime); if (!isNaN(startObj.getTime())) startStr = formatTimeStr(startObj); }
+          setEditingDeliveryShift(null); setDeliveryFormData({ ...emptyForm, date: getWorkDateStr(), startTime: startStr, endTime: timeNow }); setIsDeliveryModalOpen(true); 
+        }} className="fixed bottom-[110px] right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] flex items-center justify-center active:scale-90 transition-all z-40 border border-blue-600"><Plus size={28}/></button>
+      )}
 
       {/* 💡 배달 마감 모달 */}
       {isDeliveryModalOpen && (
@@ -1088,7 +1136,20 @@ function DeliveryView({ user, userData, dailyDeliveries, selectedYear, selectedM
                    <div key={item.id} className="flex justify-between items-center"><div className="flex items-center gap-2"><span className="text-[10px] font-black px-2 py-1 rounded bg-slate-800 text-white">{item.platform}</span><span className="font-black">{item.device === 'sub' ? SUB_LABEL : MAIN_LABEL}</span><span className="text-[11px] text-slate-500">({item.count}건)</span></div><div className="font-black">{formatLargeMoney(item.amount)}원</div></div>
                  ))}
                </div>
-               <div className="grid grid-cols-2 gap-3"><button onClick={() => deleteShift(selectedShiftDetail)} className="py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-sm flex items-center justify-center gap-1.5 shadow-sm active:scale-95"><Trash2 size={18}/> 삭제</button><button onClick={() => setSelectedShiftDetail(null)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button></div>
+               
+               {/* 💡 [변경] 읽기 전용 상태일 때는 닫기 버튼만 노출 */}
+               {isReadOnly ? (
+                 <button onClick={() => setSelectedShiftDetail(null)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm flex items-center justify-center shadow-sm active:scale-95">닫기</button>
+               ) : (
+                 <div className="grid grid-cols-2 gap-3">
+                   <button onClick={() => openEditShiftForm(selectedShiftDetail)} className="py-4 bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-700 rounded-2xl font-black text-sm flex items-center justify-center gap-1.5 transition-colors active:scale-95 shadow-sm">
+                     <Edit3 size={18}/> 타임 전체 수정
+                   </button>
+                   <button onClick={() => deleteShift(selectedShiftDetail)} className="py-4 bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-slate-700 rounded-2xl font-black text-sm flex items-center justify-center gap-1.5 transition-colors active:scale-95 shadow-sm">
+                     <Trash2 size={18}/> 삭제
+                   </button>
+                 </div>
+               )}
             </div>
          </div>
       )}
@@ -1133,7 +1194,9 @@ export default function App() {
   const [globalNotice, setGlobalNotice] = useState(null);
   const [triggerInfoModal, setTriggerInfoModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  // 💡 마이그레이션 버튼 로딩용 상태 추가
+  
+  // 💡 [신규] 가면 쓰기(대리 열람) 상태
+  const [impersonatingUser, setImpersonatingUser] = useState(null);
   
   const todayStr = getKSTDateStr();
   const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
@@ -1157,9 +1220,6 @@ export default function App() {
         onSnapshot(query(collection(db, 'users'), where('status', 'in', ['approved', 'admin'])), (s) => 
           setAllUsers(s.docs.map(doc => ({ uid: doc.id, ...doc.data() })))
         );
-        onSnapshot(query(collection(db, 'delivery'), where('userId', '==', currentUser.uid)), (s) => 
-          setDailyDeliveries(s.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse())
-        );
         onSnapshot(doc(db, 'settings', 'globalNotice'), (s) => 
           setGlobalNotice(s.exists() ? s.data() : null)
         );
@@ -1169,6 +1229,18 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  // 💡 [신규] 수익 데이터 가져오기 (가면 쓰기 상태에 따라 대상 변경)
+  useEffect(() => {
+    if (user) {
+      const targetUid = impersonatingUser ? impersonatingUser.uid : user.uid;
+      const q = query(collection(db, 'delivery'), where('userId', '==', targetUid));
+      const unsub = onSnapshot(q, (s) => 
+        setDailyDeliveries(s.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse())
+      );
+      return () => unsub();
+    }
+  }, [user, impersonatingUser]);
 
   const isAdmin = userData?.status === 'admin' || userData?.isAdmin === true;
   useEffect(() => { 
@@ -1244,6 +1316,18 @@ export default function App() {
   return (
     <div className="h-[100dvh] flex flex-col bg-slate-50 overflow-hidden font-sans select-none">
       
+      {/* 💡 [신규] 다른 유저 화면 보기 모드일 때 뜨는 초강력 경고바 */}
+      {impersonatingUser && (
+        <div className="bg-rose-600 text-white p-3 text-center text-sm font-black flex justify-between items-center z-50 shrink-0 shadow-md">
+           <div className="flex items-center gap-2 animate-pulse">
+             <Ghost size={16}/> {impersonatingUser.nickname}님의 수익 (읽기 전용)
+           </div>
+           <button onClick={() => { setImpersonatingUser(null); setActiveTab('settings'); }} className="px-3 py-1.5 bg-white text-rose-600 rounded-lg text-xs shadow-sm font-black active:scale-95 transition-transform">
+             돌아가기
+           </button>
+        </div>
+      )}
+
       <div className="bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200 z-40 shrink-0">
         <header className="px-5 pb-3 flex justify-between items-center" style={{ paddingTop: 'max(1.2rem, env(safe-area-inset-top))' }}>
           <div>
@@ -1269,9 +1353,14 @@ export default function App() {
         <main className="max-w-md mx-auto min-h-full">
           {activeTab === 'delivery' && (
              <DeliveryView 
-               user={user} userData={userData} dailyDeliveries={dailyDeliveries} 
-               selectedYear={selectedYear} selectedMonth={selectedMonth} globalNotice={globalNotice}
+               user={user} 
+               userData={impersonatingUser || userData}  /* 💡 가면 쓴 상태면 그 사람 정보 전달 */
+               dailyDeliveries={dailyDeliveries} 
+               selectedYear={selectedYear} 
+               selectedMonth={selectedMonth} 
+               globalNotice={globalNotice}
                onNoticeClick={() => { setActiveTab('board'); setTriggerInfoModal(true); }} 
+               isReadOnly={!!impersonatingUser} /* 💡 읽기 전용 모드 ON */
              />
           )}
           {activeTab === 'board' && (
@@ -1284,6 +1373,7 @@ export default function App() {
           {/* 💡 정비 관리에 userData 전달 (닉네임 저장용) */}
           {activeTab === 'maintenance' && <MaintenanceView user={user} userData={userData} />}
           {activeTab === 'status' && <StatusView allUsers={allUsers} />}
+          
           {activeTab === 'settings' && (
             <div className="p-5 space-y-6 animate-in fade-in duration-500">
               <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 text-center space-y-4">
@@ -1302,6 +1392,22 @@ export default function App() {
                      {isSyncing ? <RefreshCw size={18} className="animate-spin" /> : <Download size={18} />}
                      {isSyncing ? '동기화 중...' : '현아에셋 과거 데이터 가져오기'}
                   </button>
+                </div>
+              )}
+
+              {/* 🚀 [신규 기능] 다른 라이더 수익 열람 (오직 방장님 계정만 뜸) */}
+              {user.uid === MASTER_USER_ID && (
+                <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-200 shadow-sm mt-6 animate-in slide-in-from-top-2">
+                  <h3 className="text-sm font-black text-emerald-700 mb-3 flex items-center gap-1.5"><Search size={16}/> 멤버 수익 조회 (방장 전용)</h3>
+                  <p className="text-xs font-bold text-emerald-600/70 mb-4">다른 멤버의 수익과 배달 내역을 <strong className="text-rose-500">읽기 전용</strong>으로 확인합니다.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {allUsers.filter(u => u.uid !== user.uid).map(u => (
+                      <button key={u.uid} onClick={() => { setImpersonatingUser(u); setActiveTab('delivery'); }} className="p-3 bg-white rounded-xl border border-emerald-100 shadow-sm text-left active:scale-95 transition-transform flex flex-col gap-1">
+                        <span className="text-[13px] font-black text-slate-800">{u.nickname}</span>
+                        <span className="text-[10px] font-bold text-slate-500">{u.name} / {u.bikeNumber?.slice(-4)}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               
@@ -1342,15 +1448,18 @@ export default function App() {
         </main>
       </div>
 
-      <div className="fixed bottom-6 left-0 right-0 pointer-events-none z-50">
-        <nav className="mx-auto max-w-sm pointer-events-auto h-[72px] bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full border border-slate-200/60 flex justify-around items-center px-4">
-          <button onClick={() => setActiveTab('delivery')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'delivery' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><Target size={24} className="mb-1" /><span className="text-[10px] font-black">수익</span></button>
-          <button onClick={() => setActiveTab('board')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'board' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><MessageSquare size={24} className="mb-1" /><span className="text-[10px] font-black">정보방</span></button>
-          <button onClick={() => setActiveTab('status')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'status' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><Users size={24} className="mb-1" /><span className="text-[10px] font-black">현황</span></button>
-          <button onClick={() => setActiveTab('maintenance')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'maintenance' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><Wrench size={24} className="mb-1" /><span className="text-[10px] font-black">정비</span></button>
-          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'settings' ? 'text-slate-800 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><Settings size={24} className="mb-1" /><span className="text-[10px] font-black">설정</span></button>
-        </nav>
-      </div>
+      {/* 💡 [변경] 가면 쓴 상태에서는 헷갈리지 않게 하단 네비게이션 숨기기 */}
+      {!impersonatingUser && (
+        <div className="fixed bottom-6 left-0 right-0 pointer-events-none z-50">
+          <nav className="mx-auto max-w-sm pointer-events-auto h-[72px] bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full border border-slate-200/60 flex justify-around items-center px-4">
+            <button onClick={() => setActiveTab('delivery')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'delivery' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><Target size={24} className="mb-1" /><span className="text-[10px] font-black">수익</span></button>
+            <button onClick={() => setActiveTab('board')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'board' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><MessageSquare size={24} className="mb-1" /><span className="text-[10px] font-black">정보방</span></button>
+            <button onClick={() => setActiveTab('status')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'status' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><Users size={24} className="mb-1" /><span className="text-[10px] font-black">현황</span></button>
+            <button onClick={() => setActiveTab('maintenance')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'maintenance' ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><Wrench size={24} className="mb-1" /><span className="text-[10px] font-black">정비</span></button>
+            <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center w-[20%] transition-all ${activeTab === 'settings' ? 'text-slate-800 scale-110' : 'text-slate-400 hover:text-slate-500'}`}><Settings size={24} className="mb-1" /><span className="text-[10px] font-black">설정</span></button>
+          </nav>
+        </div>
+      )}
     </div>
   );
 }
