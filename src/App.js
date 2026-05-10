@@ -954,6 +954,8 @@ export default function App() {
   
   // 💡 가면 쓰기(대리 열람) 상태
   const [impersonatingUser, setImpersonatingUser] = useState(null);
+  /** 멤버 수익 열람 시 배달 쿼리용 — 객체 참조와 무관하게 문서 ID(uid)만 사용 */
+  const [viewingDeliveryUserId, setViewingDeliveryUserId] = useState(null);
   
   const todayStr = getKSTDateStr();
   const [selectedYear, setSelectedYear] = useState(parseInt(todayStr.slice(0, 4)));
@@ -986,7 +988,8 @@ export default function App() {
           setGlobalNotice(s.exists() ? s.data() : null)
         );
       } else { 
-        setUser(null); setUserData(null); setAllUsers([]); setPendingUsers([]); setGlobalNotice(null); setLoading(false); 
+        setUser(null); setUserData(null); setAllUsers([]); setPendingUsers([]); setGlobalNotice(null); setLoading(false);
+        setImpersonatingUser(null); setViewingDeliveryUserId(null);
       }
     });
 
@@ -998,12 +1001,12 @@ export default function App() {
     };
   }, []);
 
-  // 💡 [수도꼭지 분리] 선택한 사용자의 수익 데이터만 정확히 가져옵니다.
+  // 💡 [수도꼭지 분리] 선택한 사용자의 수익 데이터만 정확히 가져옵니다. (viewingDeliveryUserId = 문자열 단일 소스)
   useEffect(() => {
     let unsubDelivery = null;
     if (user) {
-      const impersonationUid = typeof impersonatingUser?.uid === 'string' && impersonatingUser.uid.trim() !== '' ? impersonatingUser.uid : '';
-      const targetUid = impersonationUid || user.uid;
+      const v = typeof viewingDeliveryUserId === 'string' ? viewingDeliveryUserId.trim() : '';
+      const targetUid = v || user.uid;
       const q = query(collection(db, 'delivery'), where('userId', '==', targetUid));
       unsubDelivery = onSnapshot(q, (s) => 
         setDailyDeliveries(s.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).reverse())
@@ -1012,7 +1015,14 @@ export default function App() {
     return () => {
       if (unsubDelivery) unsubDelivery();
     };
-  }, [user, impersonatingUser]);
+  }, [user?.uid, viewingDeliveryUserId]);
+
+  const scopedDailyDeliveries = useMemo(() => {
+    const list = dailyDeliveries || [];
+    const v = typeof viewingDeliveryUserId === 'string' ? viewingDeliveryUserId.trim() : '';
+    if (!v || !user?.uid || v === user.uid) return list;
+    return list.filter((d) => d.userId === v);
+  }, [dailyDeliveries, viewingDeliveryUserId, user?.uid]);
 
   const isAdmin = userData?.status === 'admin' || userData?.isAdmin === true;
   
@@ -1097,7 +1107,7 @@ export default function App() {
            <div className="flex items-center gap-2 animate-pulse">
              <Ghost size={16}/> {impersonatingUser.nickname}님의 수익 (읽기 전용)
            </div>
-           <button onClick={() => { setImpersonatingUser(null); setActiveTab('settings'); }} className="px-3 py-1.5 bg-white text-rose-600 rounded-lg text-xs shadow-sm font-black active:scale-95 transition-transform">
+           <button onClick={() => { setViewingDeliveryUserId(null); setImpersonatingUser(null); setActiveTab('settings'); }} className="px-3 py-1.5 bg-white text-rose-600 rounded-lg text-xs shadow-sm font-black active:scale-95 transition-transform">
              돌아가기
            </button>
         </div>
@@ -1130,7 +1140,7 @@ export default function App() {
              <DeliveryView 
                user={user} 
                userData={impersonatingUser || userData} 
-               dailyDeliveries={dailyDeliveries} 
+               dailyDeliveries={scopedDailyDeliveries} 
                selectedYear={selectedYear} 
                selectedMonth={selectedMonth} 
                globalNotice={globalNotice}
@@ -1176,7 +1186,7 @@ export default function App() {
                   <p className="text-xs font-bold text-emerald-600/70 mb-4">다른 멤버의 수익과 배달 내역을 <strong className="text-rose-500">읽기 전용</strong>으로 확인합니다.</p>
                   <div className="grid grid-cols-2 gap-2">
                     {allUsers.filter(u => u.uid !== user.uid).map(u => (
-                      <button key={u.uid} onClick={() => { setImpersonatingUser(u); setActiveTab('delivery'); }} className="p-3 bg-white rounded-xl border border-emerald-100 shadow-sm text-left active:scale-95 transition-transform flex flex-col gap-1 hover:bg-emerald-100/50">
+                      <button key={u.uid} onClick={() => { const rid = String(u?.uid || '').trim(); if (!rid) return; setViewingDeliveryUserId(rid); setImpersonatingUser(u); setActiveTab('delivery'); }} className="p-3 bg-white rounded-xl border border-emerald-100 shadow-sm text-left active:scale-95 transition-transform flex flex-col gap-1 hover:bg-emerald-100/50">
                         <span className="text-[13px] font-black text-slate-800">{u.nickname}</span>
                         <span className="text-[10px] font-bold text-slate-500">{u.name} / {u.bikeNumber?.slice(-4)}</span>
                       </button>
